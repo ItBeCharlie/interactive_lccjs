@@ -1,0 +1,8 @@
+            ld r1, x
+            dout r1
+            add r1, r1, 10
+            dout r1
+            st r1, x
+            dout r1
+            halt
+x:          .word 20

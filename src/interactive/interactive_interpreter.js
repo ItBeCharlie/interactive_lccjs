@@ -46,6 +46,8 @@ class Interpreter {
 		this.instructionsCap = 500000; // Limit the number of instructions to prevent infinite loops
 		this.debugMode = false; // Debug mode flag
 		this.hasJumped = false; // Flag to track jump/branch instruction executions
+		this.currentIteration = 0; // What step of interpretation are we on. Cannot go negative
+		this.snapshot = []; // Contains what updates occured at any step in memory. Appended to when new sections of program are executed
 	}
 
 	main(args) {
@@ -364,11 +366,79 @@ class Interpreter {
 		this.spInitial = this.r[6]; // Assuming r6 is the stack pointer
 
 		while (this.running) {
-			this.step();
+			let input = this.readLineFromStdin();
+			let stepNumber = parseInt(input.inputLine, 10);
+
+			// Check if new instructions are to be executed
+			if (stepNumber > 0) {
+				// When true, new inputs from user should be read, otherwise, restore the input
+				for (let i = 0; i < Math.abs(stepNumber) && this.running; i++) {
+					this.executeNextInstruction(
+						this.currentIteration == this.snapshot.length
+					);
+					this.currentIteration++;
+				}
+			} else {
+				// New State should not be less than 0
+				let newState = Math.max(this.currentIteration + stepNumber, 0);
+				console.log("NEWSTATE: ", newState);
+				this.restorePrevState(newState);
+				this.currentIteration = newState;
+			}
+
+			console.log(
+				"\n\nCurUpdt: ",
+				this.snapshot[this.currentIteration - 1]
+			);
+			console.log("CurIter: ", this.currentIteration);
+			this.DEBUG_printMemory(0, 10);
+			console.log(
+				"INST: ",
+				this.mem[
+					this.snapshot[this.currentIteration - 1].pc.old
+				].toString(16)
+			);
 		}
 	}
 
-	step() {
+	restorePrevState(newState) {
+		let log = this.snapshot[newState];
+
+		// Restore old pc
+		this.pc = log.pc.old;
+
+		// Restore old flags
+		this.c = log.flags.old.c;
+		this.v = log.flags.old.v;
+		this.n = log.flags.old.n;
+		this.z = log.flags.old.z;
+
+		// Restore old register values
+		for (let i = 0; i < 8; i++) this.r[i] = log.registers.old[i];
+
+		// Undo any changes to memory
+		for (let i = this.currentIteration - 1; i >= newState; i--) {
+			this.restorePrevMemory(i);
+		}
+	}
+
+	restorePrevMemory(state) {
+		// console.log("TEST: ", this.snapshot[state], state);
+		// console.log("MEMORY: ", this.snapshot[state].memory);
+		let oldMem = this.snapshot[state].memory;
+		if (oldMem.address != null) {
+			let oldValues = oldMem.old;
+			for (let i = 0; i < oldValues.length; i++) {
+				this.mem[oldMem.address + i] = oldValues[i];
+			}
+		}
+	}
+
+	DEBUG_printMemory(address, size) {
+		console.log("MEMORY: ", this.mem.slice(address, address + size));
+	}
+
+	executeNextInstruction(readInNewInput) {
 		// Fetch instruction
 		this.ir = this.mem[this.pc++];
 		// Decode instruction
@@ -386,6 +456,27 @@ class Interpreter {
 		this.eopcode = this.ir & 0x1f; // eopcode (bits 4-0)
 		this.trapvec = this.ir & 0xff; // trap vector (bits 7-0)
 
+		this.memoryChange = {
+			hasChanged: false,
+			address: null,
+			old: null,
+			new: null,
+		};
+
+		// this.memoryChange = {
+		// 	oldpc: this.pc - 1,
+		// 	newpc: this.pc,
+		// 	register: null,
+		// 	memory: null,
+		// 	oldVal: null,
+		// 	newVal: null,
+		// 	oldsp: null,
+		// 	newsp: null,
+		// 	string: null,
+		// 	oldflags: { c: this.c, v: this.v, n: this.n, z: this.z },
+		// 	newflags: null,
+		// };
+
 		if (this.debugMode) {
 			// TODO: decide how to handle e2e test case
 			// to quit debug mode
@@ -398,6 +489,7 @@ class Interpreter {
 
 		const prevRegs = this.r.slice(); // saves r0–r7
 		const prevPC = this.pc; // saves the previous PC value
+		const prevFlags = { c: this.c, v: this.v, n: this.n, z: this.z };
 
 		// Execute instruction
 		switch (this.opcode) {
@@ -454,6 +546,20 @@ class Interpreter {
 				this.running = false;
 		}
 
+		// Only update the change log if this is a new execution
+		if (readInNewInput) {
+			let memoryChange = {
+				pc: { old: prevPC - 1, new: this.pc },
+				registers: { old: prevRegs, new: this.r.slice() },
+				flags: {
+					old: prevFlags,
+					new: { c: this.c, v: this.v, n: this.n, z: this.z },
+				},
+				memory: this.memoryChange,
+			};
+
+			this.snapshot.push(memoryChange);
+		}
 		// if any registers changed or flags were set, print them out
 		if (this.debugMode && this.running) {
 			let regsOrFlagsOutput = "";
@@ -705,6 +811,8 @@ class Interpreter {
 		switch (this.eopcode) {
 			case 0: // PUSH // mem[--sp] = sr
 				// decrement stack pointer and store value
+				this.memoryChange.register = 6;
+				this.memoryChange.oldVal = this.r[6];
 				this.r[6] = (this.r[6] - 1) & 0xffff;
 				// save source register to memory at address pointed at by stack pointer
 				this.mem[this.r[6]] = this.r[this.sr];
@@ -712,6 +820,7 @@ class Interpreter {
 			case 1: // POP // dr = mem[sp++];
 				// load value from memory at address pointed at by stack pointer to destination
 				this.r[this.dr] = this.mem[this.r[6]];
+				// NEED A WAY TO DO 2 REGISTERS
 				// increment stack pointer (to deallocate stack memory)
 				this.r[6] = (this.r[6] + 1) & 0xffff;
 				break;
@@ -871,8 +980,11 @@ class Interpreter {
 
 	executeST() {
 		const address = (this.pc + this.pcoffset9) & 0xffff;
+		this.memoryChange.address = address;
+		this.memoryChange.old = [this.mem[address]];
 		this.mem[address] = this.r[this.sr];
 		if (address > this.memMax) this.memMax = address;
+		this.memoryChange.new = [this.r[this.sr]];
 	}
 
 	executeMVI() {
@@ -890,7 +1002,10 @@ class Interpreter {
 
 	executeSTR() {
 		const address = (this.r[this.baser] + this.offset6) & 0xffff;
+		this.memoryChange.address = address;
+		this.memoryChange.old = [this.mem[address]];
 		this.mem[address] = this.r[this.sr];
+		this.memoryChange.new = [this.r[this.sr]];
 	}
 
 	executeJMP() {

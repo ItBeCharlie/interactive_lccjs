@@ -1,0 +1,31 @@
+LCC.js Assemble/Link/Interpret/Debug Ver 0.1  Mon, Jul 21, 2025, 16:49:14
+DeGennaro, Charles L
+
+Header
+o
+C
+
+Loc   Code           Source Code
+0000  1021                   add r0, r0, 1
+0001  f002                   dout r0
+0002  1021                   add r0, r0, 1
+0003  f002                   dout r0
+0004  1021                   add r0, r0, 1
+0005  f002                   dout r0
+0006  1021                   add r0, r0, 1
+0007  f002                   dout r0
+0008  1021                   add r0, r0, 1
+0009  f002                   dout r0
+000a  1021                   add r0, r0, 1
+000b  f002                   dout r0
+000c  1021                   add r0, r0, 1
+000d  f002                   dout r0
+000e  f000                   halt
+====================================================== Output
+1234567
+========================================== Program statistics
+Input file name          =   interactive_tests/test2.a
+Instructions executed    =   f (hex)    15 (dec)
+Program size             =   f (hex)    15 (dec)
+Max stack size           =   0 (hex)    0 (dec)
+Load point               =   0 (hex)    0 (dec)

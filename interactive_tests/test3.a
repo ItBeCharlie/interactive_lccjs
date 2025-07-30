@@ -1,0 +1,17 @@
+            mov r1, 1
+            mov r2, 2
+            mov r3, 3
+            mov r4, 4
+            mov r5, 5
+            mov r6, 6
+            mov r7, 7
+            dout r0
+            dout r1
+            dout r2
+            dout r3
+            dout r4
+            dout r5
+            dout r6
+            dout r7
+            halt
+            
