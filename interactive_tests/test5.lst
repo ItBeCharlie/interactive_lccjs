@@ -1,0 +1,37 @@
+LCC.js Assemble/Link/Interpret/Debug Ver 0.1  Thu, Jul 31, 2025, 00:45:05
+DeGennaro, Charles L
+
+Header
+o
+S 000b
+C
+
+Loc   Code
+                                .start main
+0000  0000       buffer:     .zero 5
+0001  0000      
+0002  0000      
+0003  0000      
+0004  0000      
+0005  0048       x:          .string "Hello"
+0006  0065      
+0007  006c      
+0008  006c      
+0009  006f      
+000a  0000      
+000b  e1f9       main:       lea r0, x
+000c  f006                   sout r0
+000d  e3f2                   lea r1, buffer
+000e  f20a                   sin r1
+000f  f206                   sout r1
+0010  f000                   halt
+====================================================== Output
+Helloabcd
+1
+1
+========================================== Program statistics
+Input file name          =   .\interactive_tests\test5.a
+Instructions executed    =   7 (hex)    7 (dec)
+Program size             =   11 (hex)    17 (dec)
+Max stack size           =   0 (hex)    0 (dec)
+Load point               =   0 (hex)    0 (dec)

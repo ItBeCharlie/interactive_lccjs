@@ -1,4 +1,4 @@
-LCC.js Assemble/Link/Interpret/Debug Ver 0.1  Mon, Jul 21, 2025, 16:45:46
+LCC.js Assemble/Link/Interpret/Debug Ver 0.1  Wed, Jul 30, 2025, 15:12:16
 DeGennaro, Charles L
 
 Header
@@ -23,10 +23,10 @@ Loc   Code           Source Code
 000e  fe02                   dout r7
 000f  f000                   halt
 ====================================================== Output
-01222345656612344423456777
+01234567
 ========================================== Program statistics
-Input file name          =   interactive_tests/test3.a
-Instructions executed    =   22 (hex)    34 (dec)
+Input file name          =   .\interactive_tests\test3.a
+Instructions executed    =   13 (hex)    19 (dec)
 Program size             =   10 (hex)    16 (dec)
 Max stack size           =   fffa (hex)    65530 (dec)
 Load point               =   0 (hex)    0 (dec)

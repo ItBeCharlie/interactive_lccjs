@@ -362,42 +362,47 @@ class Interpreter {
 		this.pc = (this.loadPoint + startAddress) & 0xffff;
 	}
 
-	run() {
+	run(listing) {
 		this.spInitial = this.r[6]; // Assuming r6 is the stack pointer
 
 		while (this.running) {
 			let input = this.readLineFromStdin();
 			let stepNumber = parseInt(input.inputLine, 10);
 
-			// Check if new instructions are to be executed
-			if (stepNumber > 0) {
-				// When true, new inputs from user should be read, otherwise, restore the input
-				for (let i = 0; i < Math.abs(stepNumber) && this.running; i++) {
-					this.executeNextInstruction(
-						this.currentIteration == this.snapshot.length
-					);
-					this.currentIteration++;
-				}
-			} else {
-				// New State should not be less than 0
-				let newState = Math.max(this.currentIteration + stepNumber, 0);
-				console.log("NEWSTATE: ", newState);
-				this.restorePrevState(newState);
-				this.currentIteration = newState;
-			}
+			this.handleSteps(stepNumber);
 
 			console.log(
 				"\n\nCurUpdt: ",
 				this.snapshot[this.currentIteration - 1]
 			);
 			console.log("CurIter: ", this.currentIteration);
-			this.DEBUG_printMemory(0, 10);
 			console.log(
 				"INST: ",
 				this.mem[
 					this.snapshot[this.currentIteration - 1].pc.old
 				].toString(16)
 			);
+			this.DEBUG_printMemory(0, 10);
+
+			console.log(listing[this.snapshot[this.currentIteration - 1].pc.old]);
+		}
+	}
+
+	handleSteps(stepNumber) {
+		// Check if new instructions are to be executed
+		if (stepNumber > 0) {
+			// When true, new inputs from user should be read, otherwise, restore the input
+			for (let i = 0; i < Math.abs(stepNumber) && this.running; i++) {
+				this.executeNextInstruction(
+					this.currentIteration == this.snapshot.length
+				);
+				this.currentIteration++;
+			}
+		} else {
+			// New State should not be less than 0
+			let newState = Math.max(this.currentIteration + stepNumber, 0);
+			this.restorePrevState(newState);
+			this.currentIteration = newState;
 		}
 	}
 
@@ -418,13 +423,16 @@ class Interpreter {
 
 		// Undo any changes to memory
 		for (let i = this.currentIteration - 1; i >= newState; i--) {
-			this.restorePrevMemory(i);
+			if( this.snapshot[i].memory.hasChanged) {
+				this.restorePrevMemory(i);
+			}
 		}
 	}
 
 	restorePrevMemory(state) {
 		// console.log("TEST: ", this.snapshot[state], state);
 		// console.log("MEMORY: ", this.snapshot[state].memory);
+
 		let oldMem = this.snapshot[state].memory;
 		if (oldMem.address != null) {
 			let oldValues = oldMem.old;
@@ -463,19 +471,6 @@ class Interpreter {
 			new: null,
 		};
 
-		// this.memoryChange = {
-		// 	oldpc: this.pc - 1,
-		// 	newpc: this.pc,
-		// 	register: null,
-		// 	memory: null,
-		// 	oldVal: null,
-		// 	newVal: null,
-		// 	oldsp: null,
-		// 	newsp: null,
-		// 	string: null,
-		// 	oldflags: { c: this.c, v: this.v, n: this.n, z: this.z },
-		// 	newflags: null,
-		// };
 
 		if (this.debugMode) {
 			// TODO: decide how to handle e2e test case
@@ -546,19 +541,22 @@ class Interpreter {
 				this.running = false;
 		}
 
+		let logEntry = {
+			pc: { old: prevPC - 1, new: this.pc },
+			registers: { old: prevRegs, new: this.r.slice() },
+			flags: {
+				old: prevFlags,
+				new: { c: this.c, v: this.v, n: this.n, z: this.z },
+			},
+			memory: this.memoryChange,
+		};
+
 		// Only update the change log if this is a new execution
 		if (readInNewInput) {
-			let memoryChange = {
-				pc: { old: prevPC - 1, new: this.pc },
-				registers: { old: prevRegs, new: this.r.slice() },
-				flags: {
-					old: prevFlags,
-					new: { c: this.c, v: this.v, n: this.n, z: this.z },
-				},
-				memory: this.memoryChange,
-			};
-
-			this.snapshot.push(memoryChange);
+			this.snapshot.push(logEntry);
+		}
+		else {
+			this.snapshot[this.currentIteration] = logEntry;
 		}
 		// if any registers changed or flags were set, print them out
 		if (this.debugMode && this.running) {
@@ -1142,14 +1140,26 @@ class Interpreter {
 
 	executeSIN() {
 		let address = this.r[this.sr];
+		this.memoryChange.address = address;
+		this.memoryChange.old = [];
+		this.memoryChange.new = [];
+
 		let { inputLine: input, isSimulated } = this.readLineFromStdin();
 
 		for (let i = 0; i < input.length; i++) {
+			this.memoryChange.old.push(this.mem[address]);
 			this.mem[address] = input.charCodeAt(i);
+			this.memoryChange.new.push(this.mem[address]);
 			address = (address + 1) & 0xffff;
 		}
 		// Null-terminate the string
+		this.memoryChange.old.push(this.mem[address]);
 		this.mem[address] = 0;
+		this.memoryChange.new.push(this.mem[address]);
+
+		this.memoryChange.hasChanged = true;
+		
+		
 
 		// add newline here if input is simulated
 		if (isSimulated) {

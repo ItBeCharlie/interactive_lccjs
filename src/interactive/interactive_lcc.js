@@ -70,11 +70,11 @@ class LCC {
 			case ".hex":
 			case ".bin":
 				this.assembleFile();
-				this.executeFile(false, true);
+				this.executeFile(false, true, ext);
 				break;
 			case ".e":
 				this.outputFileName = infile;
-				this.executeFile(false);
+				this.executeFile(false, false, ext);
 				break;
 			case ".o":
 				// to match feature parity with original LCC, we attempt to link the single .o file
@@ -84,7 +84,7 @@ class LCC {
 				// Likely an assembly source (e.g. .a or anything else)
 				this.assembleFile();
 				if (!this.assembler.isObjectModule) {
-					this.executeFile(true);
+					this.executeFile(true, true, ext);
 				}
 				break;
 		}
@@ -229,11 +229,33 @@ class LCC {
 		}
 	}
 
+	// Will update the listing map to contain the source code for each location in the program
+	createListingMap(fileType) {
+		let listingMap = {};
+		console.log(this.assembler.listing);
+		for (let i = 0; i < this.assembler.listing.length; i++) {
+			const entry = this.assembler.listing[i];
+			switch (fileType) {
+				case ".hex":
+				case ".bin":
+					listingMap[entry.locCtr] = entry;
+				break;
+				default:
+				for(let j = 0; j < entry.codeWords.length; j++) {
+					listingMap[entry.locCtr + j] = entry;
+				break;
+				}
+			}
+		}
+
+		return listingMap;
+	}
+
 	// Executes the output file
 	// includeSourceCode: boolean, includeComments: boolean
 	// includeSourceCode: whether to include source code in the .lst and .bst files (true when assembling and interpretting .a files)
 	// includeComments: whether to include comments in the .lst and .bst files (this option is set to true just for .bin files currently)
-	executeFile(includeSourceCode, includeComments) {
+	executeFile(includeSourceCode, includeComments, fileType) {
 		const interpreter = new Interpreter();
 
 		// Set options in the interpreter
@@ -266,9 +288,12 @@ class LCC {
 			);
 		}
 
+		let listingMap = this.createListingMap(fileType);
+		console.log(listingMap);
+
 		// Run the interpreter
 		try {
-			interpreter.run();
+			interpreter.run(listingMap);
 			if (this.generateStats) {
 				console.log(); // Ensure cursor moves to the next line
 			}

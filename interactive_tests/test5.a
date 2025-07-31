@@ -1,0 +1,9 @@
+            .start main
+buffer:     .zero 5
+x:          .string "Hello"
+main:       lea r0, x
+            sout r0
+            lea r1, buffer
+            sin r1
+            sout r1
+            halt

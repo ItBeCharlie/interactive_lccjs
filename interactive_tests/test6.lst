@@ -1,0 +1,22 @@
+LCC.js Assemble/Link/Interpret/Debug Ver 0.1  Wed, Jul 30, 2025, 22:41:05
+DeGennaro, Charles L
+
+Header
+o
+C
+
+Loc   Code
+0000  2003 ; 2003
+0001  f002 ; f002
+0002  f001 ; f001
+0003  f000 ; f000
+0004  0005 ; 0005
+====================================================== Output
+5
+
+========================================== Program statistics
+Input file name          =   .\interactive_tests\test6.bin
+Instructions executed    =   4 (hex)    4 (dec)
+Program size             =   5 (hex)    5 (dec)
+Max stack size           =   0 (hex)    0 (dec)
+Load point               =   0 (hex)    0 (dec)
