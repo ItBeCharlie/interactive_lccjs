@@ -138,7 +138,10 @@ class LCC {
 			if (arg.startsWith("-")) {
 				// Option
 				switch (arg) {
-					case "-d":
+					case "-i":
+						this.options.interactiveMode = true;
+						break;
+					case "-d":	
 						this.options.debug = true;
 						break;
 					case "-m":
@@ -289,11 +292,11 @@ class LCC {
 		}
 
 		let listingMap = this.createListingMap(fileType);
-		console.log(listingMap);
+		// console.log(listingMap);
 
 		// Run the interpreter
 		try {
-			interpreter.run(listingMap);
+			interpreter.run(listingMap, this.options.interactiveMode);
 			if (this.generateStats) {
 				console.log(); // Ensure cursor moves to the next line
 			}

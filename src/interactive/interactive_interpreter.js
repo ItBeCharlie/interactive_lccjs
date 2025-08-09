@@ -362,33 +362,46 @@ class Interpreter {
 		this.pc = (this.loadPoint + startAddress) & 0xffff;
 	}
 
-	run(listing) {
+	run(listing, interactiveMode=false) {
 		this.spInitial = this.r[6]; // Assuming r6 is the stack pointer
 
 		while (this.running) {
-			let input = this.readLineFromStdin();
-			let stepNumber = parseInt(input.inputLine, 10);
-
-			this.handleSteps(stepNumber);
-
-			console.log(
-				"\n\nCurUpdt: ",
-				this.snapshot[this.currentIteration - 1]
-			);
-			console.log("CurIter: ", this.currentIteration);
-			console.log(
-				"INST: ",
-				this.mem[
-					this.snapshot[this.currentIteration - 1].pc.old
-				].toString(16)
-			);
-			this.DEBUG_printMemory(0, 10);
-
-			console.log(listing[this.snapshot[this.currentIteration - 1].pc.old]);
+			if(interactiveMode) {
+				console.log("\nEnter number of steps to execute (positive to step forward, negative to step back, 0 to reprint current state): ");
+				let input = this.readLineFromStdin();
+				let stepNumber = parseInt(input.inputLine, 10);
+				this.handleSteps(stepNumber);
+				this.displayInteractiveMode(listing);
+			}
+			else {
+				// Normal LCC execution, handle 1 step at a time until termination
+				this.handleSteps(1);
+			}
 		}
 	}
 
+	displayInteractiveMode(listing) {
+		console.log(
+			"\n\nCurUpdt: ",
+			this.snapshot[this.currentIteration - 1]
+		);
+		console.log("CurIter: ", this.currentIteration);
+		console.log(
+			"INST: ",
+			this.mem[
+				this.snapshot[this.currentIteration - 1].pc.old
+			].toString(16)
+		);
+		this.DEBUG_printMemory(0, 10);
+
+		console.log(listing[this.snapshot[this.currentIteration - 1].pc.old]);
+	}
+
 	handleSteps(stepNumber) {
+		if(stepNumber === 0) {
+			// Reprint current state
+			return;
+		}
 		// Check if new instructions are to be executed
 		if (stepNumber > 0) {
 			// When true, new inputs from user should be read, otherwise, restore the input
