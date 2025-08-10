@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { generateBSTLSTContent } = require("../utils/genStats.js");
 const nameHandler = require("../utils/name.js");
+const { diff } = require("util");
 
 const newline = process.platform === "win32" ? "\r\n" : "\n";
 
@@ -362,22 +363,315 @@ class Interpreter {
 		this.pc = (this.loadPoint + startAddress) & 0xffff;
 	}
 
+	initializeLog() {
+		this.snapshot = [];
+		this.currentIteration = 1; // Start at iteration 1 since 0 is initial state
+		this.memoryChange = {
+			hasChanged: false,
+			address: this.loadPoint,
+			old: Array(this.memMax + 1 - this.loadPoint).fill(0),
+			new: this.initialMem.slice(this.loadPoint, this.memMax + 1),
+		};
+		let logEntry = {
+			pc: this.pc,
+			ir: 0,
+			registers: this.r.slice(),
+			flags: { c: this.c, v: this.v, n: this.n, z: this.z },
+			memory: this.memoryChange,
+		};
+		this.snapshot.push(logEntry);
+	}
+
 	run(listing, interactiveMode=false) {
 		this.spInitial = this.r[6]; // Assuming r6 is the stack pointer
+
+		this.initializeLog();
 
 		while (this.running) {
 			if(interactiveMode) {
 				console.log("\nEnter number of steps to execute (positive to step forward, negative to step back, 0 to reprint current state): ");
 				let input = this.readLineFromStdin();
 				let stepNumber = parseInt(input.inputLine, 10);
+				let originalIteration = this.currentIteration - 1;
 				this.handleSteps(stepNumber);
-				this.displayInteractiveMode(listing);
+				let newIteration = this.currentIteration - 1;
+				let update;
+				// console.log(this.snapshot);
+				update = this.stateUpdates(originalIteration, newIteration);	
+
+
+				// this.displayInteractiveMode(listing);
+				console.log(update);
+				this.newDisplayInteractiveMode(listing, update);
+				// console.log("currentIteration: ", this.currentIteration);
+
 			}
 			else {
 				// Normal LCC execution, handle 1 step at a time until termination
 				this.handleSteps(1);
 			}
 		}
+	}
+
+	stateUpdates(oldIteration, newIteration) {
+		oldIteration = Math.max(oldIteration, 0);
+		newIteration = Math.max(newIteration, 0);
+		console.log("State Updates: ", oldIteration, newIteration);
+
+		let update = {
+			registers: {old: this.snapshot[oldIteration].registers, new: this.snapshot[newIteration].registers},
+			pc: { old: this.snapshot[oldIteration].pc, new: this.snapshot[newIteration].pc},
+			ir: { old: this.snapshot[oldIteration].ir, new: this.snapshot[newIteration].ir},
+			flags: {old: this.snapshot[oldIteration].flags, new: this.snapshot[newIteration].flags},
+			memory: {},
+		};
+
+		let start = oldIteration;
+		let end = newIteration;
+
+		if(oldIteration > newIteration) {
+			start = newIteration;
+			end = oldIteration;
+		}
+
+		// For memory changes, first go through all snapshots from oldIteration to newIteration and store which addresses were updated
+		let addressSet = new Set();
+		for(let i = start; i <= end; i++) {
+			let memoryChange = this.snapshot[i].memory;
+			if(memoryChange.hasChanged) {
+				let baseAddress = memoryChange.address;
+				let length = memoryChange.new.length;
+				for(let j = 0; j < length; j++) {
+					addressSet.add(baseAddress + j);
+				}
+			}
+		}
+
+		// Next, go through each address flagged and compare the old and new values to see if an update occured
+		for(let address of addressSet) {
+			let oldValue = this.snapshot[oldIteration].memory[address];
+			let newValue = this.snapshot[newIteration].memory[address];
+			if(oldValue !== newValue) {
+				update.memory[address] = {old: oldValue, new: newValue};
+			}
+		}
+
+		return update;
+	}
+
+	newDisplayInteractiveMode(listing, update) {
+		// What register should the stack display relative to
+		let relativeAddress = update.registers.new[5];
+		// How many memory addresses should be displayed under the relative address
+		let displaySize = 4;
+
+		let stackAddress = 0xfff3;
+		if(relativeAddress < 0xffff - displaySize && relativeAddress != 0) {
+			stackAddress = relativeAddress - 8;
+		}
+
+		let fp = update.registers.new[5];
+		let sp = update.registers.new[6];
+
+		let outputString = "";
+		console.log("+-----------------+--------------+-------------+");
+		console.log("|    Registers    | Stack:  Addr |   Memory    |");
+		console.log("+-----------------+-------+------+-------------+");
+		// Handle base registers
+		for (let i = 0; i < 8; i++) {
+			outputString = "";
+			let oldRegValue = update.registers.old[i].toString(16).padStart(4, "0");
+			let newRegValue = update.registers.new[i].toString(16).padStart(4, "0");
+			if( oldRegValue !== newRegValue) {
+				outputString = `| r${i.toString()}: ${oldRegValue} > ${newRegValue} | `;
+			}
+			else {
+				outputString = `| r${i.toString()}: ${newRegValue}        | `;
+			}
+
+			if(fp == sp && fp == stackAddress) {
+				outputString += "fpsp> | ";
+			}
+			else if(fp == stackAddress) {
+				outputString += "  fp> | ";
+			}
+			else if(sp == stackAddress) {
+				outputString += "  sp> | ";
+			}
+			else {
+				outputString += "      | ";
+			}
+
+			outputString += `${stackAddress.toString(16).padStart(4, "0")} | `;
+
+			if(stackAddress in update.memory) {
+				let oldMemValue = update.memory[stackAddress].old;
+				let newMemValue = update.memory[stackAddress].new;
+				outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} | `;
+			}
+			else {
+				let memValue = this.mem[stackAddress];
+				outputString += `${memValue.toString(16).padStart(4, "0")}        | `;
+			}
+			
+
+			stackAddress++;
+			console.log(outputString);
+		}
+
+		// Handle special registers
+		for (let i = 5; i < 8; i++) {
+			outputString = "";
+			let registerName = ["fp", "sp", "lr"][i - 5];
+			let oldRegValue = update.registers.old[i].toString(16).padStart(4, "0");
+			let newRegValue = update.registers.new[i].toString(16).padStart(4, "0");
+			if( oldRegValue !== newRegValue) {
+				outputString = `| ${registerName}: ${oldRegValue} > ${newRegValue} | `;
+			}
+			else {
+				outputString = `| ${registerName}: ${newRegValue}        | `;
+			}
+
+			if(fp == sp && fp == stackAddress) {
+				outputString += "fpsp> | ";
+			}
+			else if(fp == stackAddress) {
+				outputString += "  fp> | ";
+			}
+			else if(sp == stackAddress) {
+				outputString += "  sp> | ";
+			}
+			else {
+				outputString += "      | ";
+			}
+
+			outputString += `${stackAddress.toString(16).padStart(4, "0")} | `;
+
+			if(stackAddress in update.memory) {
+				let oldMemValue = update.memory[stackAddress].old;
+				let newMemValue = update.memory[stackAddress].new;
+				outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} | `;
+			}
+			else {
+				let memValue = this.mem[stackAddress];
+				outputString += `${memValue.toString(16).padStart(4, "0")}        | `;
+			}
+
+			stackAddress++;
+			console.log(outputString);
+		}
+
+		// Handle pc
+		let oldPcValue = update.pc.old.toString(16).padStart(4, "0");
+		let newPcValue = update.pc.new.toString(16).padStart(4, "0");
+
+		outputString = "";
+		if( oldPcValue !== newPcValue) {
+			outputString = `| pc: ${oldPcValue} > ${newPcValue} | `;
+		}
+		else {
+			outputString = `| pc: ${newPcValue}        | `;
+		}
+
+		if(fp == sp && fp == stackAddress) {
+			outputString += "fpsp> | ";
+		}
+		else if(fp == stackAddress) {
+			outputString += "  fp> | ";
+		}
+		else if(sp == stackAddress) {
+			outputString += "  sp> | ";
+		}
+		else {
+			outputString += "      | ";
+		}
+
+		outputString += `${stackAddress.toString(16).padStart(4, "0")} | `;
+
+		if(stackAddress in update.memory) {
+			let oldMemValue = update.memory[stackAddress].old;
+			let newMemValue = update.memory[stackAddress].new;
+			outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} | `;
+		}
+		else {
+			let memValue = this.mem[stackAddress];
+			outputString += `${memValue.toString(16).padStart(4, "0")}        | `;
+		}
+
+		stackAddress++;
+		console.log(outputString);
+
+		// Handle ir
+		let oldIrValue = update.ir.old.toString(16).padStart(4, "0");
+		let newIrValue = update.ir.new.toString(16).padStart(4,	"0");
+		outputString = "";
+		if( oldIrValue !== newIrValue) {
+			outputString = `| ir: ${oldIrValue} > ${newIrValue} | `;
+		}
+		else {
+			outputString = `| ir: ${newIrValue}        | `;
+		}
+
+		if(fp == sp && fp == stackAddress) {
+			outputString += "fpsp> | ";
+		}
+		else if(fp == stackAddress) {
+			outputString += "  fp> | ";
+		}
+		else if(sp == stackAddress) {
+			outputString += "  sp> | ";
+		}
+		else {
+			outputString += "      | ";
+		}
+
+		outputString += `${stackAddress.toString(16).padStart(4, "0")} | `;
+
+		if(stackAddress in update.memory) {
+			let oldMemValue = update.memory[stackAddress].old;
+			let newMemValue = update.memory[stackAddress].new;
+			outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} | `;
+		}
+		else {
+			let memValue = this.mem[stackAddress];
+			outputString += `${memValue.toString(16).padStart(4, "0")}        | `;
+		}
+
+		stackAddress++;
+		console.log(outputString);
+
+		console.log("+----------+------+-+-----+--+---+----+--------+");
+
+		// Handle flags
+		outputString = "|  Flags:  |";
+		if (update.flags.old.c !== update.flags.new.c) {
+			outputString += ` c: ${update.flags.old.c}>${update.flags.new.c} |`;
+		}
+		else {
+			outputString += ` c: ${update.flags.new.c}   |`;
+		}
+		if (update.flags.old.v !== update.flags.new.v) {
+			outputString += ` v: ${update.flags.old.v}>${update.flags.new.v} |`;
+		}
+		else {
+			outputString += ` v: ${update.flags.new.v}   |`;
+		}
+		if (update.flags.old.n !== update.flags.new.n) {
+			outputString += ` n: ${update.flags.old.n}>${update.flags.new.n} |`;
+		}
+		else {
+			outputString += ` n: ${update.flags.new.n}   |`;
+		}
+		if (update.flags.old.z !== update.flags.new.z) {
+			outputString += ` z: ${update.flags.old.z}>${update.flags.new.z} |`;
+		}
+		else {
+			outputString += ` z: ${update.flags.new.z}   |`;
+		}
+		console.log(outputString);
+		console.log("+----------+--------+--------+--------+--------+");
+
+
 	}
 
 	displayInteractiveMode(listing) {
@@ -389,12 +683,12 @@ class Interpreter {
 		console.log(
 			"INST: ",
 			this.mem[
-				this.snapshot[this.currentIteration - 1].pc.old
+				this.snapshot[this.currentIteration - 1].pc
 			].toString(16)
 		);
 		this.DEBUG_printMemory(0, 10);
 
-		console.log(listing[this.snapshot[this.currentIteration - 1].pc.old]);
+		// console.log(listing[this.snapshot[this.currentIteration - 1].pc]);
 	}
 
 	handleSteps(stepNumber) {
@@ -423,16 +717,16 @@ class Interpreter {
 		let log = this.snapshot[newState];
 
 		// Restore old pc
-		this.pc = log.pc.old;
+		this.pc = log.pc;
 
 		// Restore old flags
-		this.c = log.flags.old.c;
-		this.v = log.flags.old.v;
-		this.n = log.flags.old.n;
-		this.z = log.flags.old.z;
+		this.c = log.flags.c;
+		this.v = log.flags.v;
+		this.n = log.flags.n;
+		this.z = log.flags.z;
 
 		// Restore old register values
-		for (let i = 0; i < 8; i++) this.r[i] = log.registers.old[i];
+		for (let i = 0; i < 8; i++) this.r[i] = log.registers[i];
 
 		// Undo any changes to memory
 		for (let i = this.currentIteration - 1; i >= newState; i--) {
@@ -448,7 +742,7 @@ class Interpreter {
 
 		let oldMem = this.snapshot[state].memory;
 		if (oldMem.address != null) {
-			let oldValues = oldMem.old;
+			let oldValues = oldMem.data;
 			for (let i = 0; i < oldValues.length; i++) {
 				this.mem[oldMem.address + i] = oldValues[i];
 			}
@@ -494,10 +788,6 @@ class Interpreter {
 			// }
 			this.debug();
 		}
-
-		const prevRegs = this.r.slice(); // saves r0–r7
-		const prevPC = this.pc; // saves the previous PC value
-		const prevFlags = { c: this.c, v: this.v, n: this.n, z: this.z };
 
 		// Execute instruction
 		switch (this.opcode) {
@@ -555,12 +845,10 @@ class Interpreter {
 		}
 
 		let logEntry = {
-			pc: { old: prevPC - 1, new: this.pc },
-			registers: { old: prevRegs, new: this.r.slice() },
-			flags: {
-				old: prevFlags,
-				new: { c: this.c, v: this.v, n: this.n, z: this.z },
-			},
+			pc: this.pc,
+			ir: this.ir,
+			registers: this.r.slice(),
+			flags: { c: this.c, v: this.v, n: this.n, z: this.z },
 			memory: this.memoryChange,
 		};
 
@@ -822,16 +1110,17 @@ class Interpreter {
 		switch (this.eopcode) {
 			case 0: // PUSH // mem[--sp] = sr
 				// decrement stack pointer and store value
-				this.memoryChange.register = 6;
-				this.memoryChange.oldVal = this.r[6];
+				this.memoryChange.new = [this.r[this.sr]];
+				this.memoryChange.hasChanged = true;
 				this.r[6] = (this.r[6] - 1) & 0xffff;
 				// save source register to memory at address pointed at by stack pointer
+				this.memoryChange.address = this.r[6];
+				this.memoryChange.old = this.mem[this.r[6]];
 				this.mem[this.r[6]] = this.r[this.sr];
 				break;
 			case 1: // POP // dr = mem[sp++];
 				// load value from memory at address pointed at by stack pointer to destination
 				this.r[this.dr] = this.mem[this.r[6]];
-				// NEED A WAY TO DO 2 REGISTERS
 				// increment stack pointer (to deallocate stack memory)
 				this.r[6] = (this.r[6] + 1) & 0xffff;
 				break;
@@ -1017,6 +1306,7 @@ class Interpreter {
 		this.memoryChange.old = [this.mem[address]];
 		this.mem[address] = this.r[this.sr];
 		this.memoryChange.new = [this.r[this.sr]];
+		this.memoryChange.hasChanged = true;
 	}
 
 	executeJMP() {
