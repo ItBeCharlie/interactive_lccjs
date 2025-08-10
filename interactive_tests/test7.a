@@ -1,0 +1,70 @@
+; Charles DeGennaro                                
+								; // c0402.c
+                                ; #include <stdio.h>
+				.start startup
+startup:        bl main
+				halt						
+
+@S0:		.string "in g"		
+                                ; void g()
+                                ; {
+g:      	push lr
+			push fp
+			mov fp, sp
+                                   	; printf("in g\n");
+			lea r0, @S0
+			sout r0
+			nl
+                                ; }
+			mov sp, fp
+			pop fp
+			pop lr
+			ret
+
+@S1:		.string "up"
+@S2:		.string "down"
+                                ; void f(void)
+                                ; {
+f:      	push lr
+			push fp
+			mov fp, sp
+									; printf("up\n");
+			lea r0, @S1
+			sout r0
+			nl
+									; g();
+			bl g
+									; printf("down\n");
+			lea r0, @S2
+			sout r0
+			nl
+                                ; }
+			mov sp, fp
+			pop fp
+			pop lr
+			ret
+
+@S3:		.string "hello"
+@S4:		.string "goodbye"
+                                ; int main()
+                                ; {
+main:       push lr
+			push fp
+			mov fp, sp
+									; printf("hello\n");
+			lea r0, @S3
+			sout r0
+			nl
+									; f();
+			bl f
+									; printf("goodbye\n");
+			lea r0, @S4
+			sout r0
+			nl
+									; return 0;
+			mov r0, 0
+                                ; }								
+			mov sp, fp
+			pop fp
+			pop lr
+			ret

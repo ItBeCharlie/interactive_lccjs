@@ -365,7 +365,7 @@ class Interpreter {
 
 	initializeLog() {
 		this.snapshot = [];
-		this.currentIteration = 1; // Start at iteration 1 since 0 is initial state
+		this.currentIteration = 0;
 		this.memoryChange = {
 			hasChanged: false,
 			address: this.loadPoint,
@@ -385,23 +385,31 @@ class Interpreter {
 	run(listing, interactiveMode=false) {
 		this.spInitial = this.r[6]; // Assuming r6 is the stack pointer
 
+		let update;
 		this.initializeLog();
+		update = this.stateUpdates(0, 0);	
+		this.newDisplayInteractiveMode(listing, update);
+
 
 		while (this.running) {
 			if(interactiveMode) {
+				// console.log("\nCurrent iteration: ", this.currentIteration);
 				console.log("\nEnter number of steps to execute (positive to step forward, negative to step back, 0 to reprint current state): ");
 				let input = this.readLineFromStdin();
 				let stepNumber = parseInt(input.inputLine, 10);
-				let originalIteration = this.currentIteration - 1;
+				let originalIteration = this.currentIteration;
+				console.log("├──────────────────┤ Output ├──────────────────┤");
 				this.handleSteps(stepNumber);
-				let newIteration = this.currentIteration - 1;
-				let update;
+				let newIteration = this.currentIteration;
+				
 				// console.log(this.snapshot);
+				// console.log("Original iteration: ", originalIteration);
+				// console.log("New iteration: ", newIteration);
 				update = this.stateUpdates(originalIteration, newIteration);	
 
 
 				// this.displayInteractiveMode(listing);
-				console.log(update);
+				// console.log(update);
 				this.newDisplayInteractiveMode(listing, update);
 				// console.log("currentIteration: ", this.currentIteration);
 
@@ -413,10 +421,72 @@ class Interpreter {
 		}
 	}
 
+	handleSteps(stepNumber) {
+		if(stepNumber === 0) {
+			// Reprint current state
+			return;
+		}
+		// Check if new instructions are to be executed
+		if (stepNumber > 0) {
+			// When true, new inputs from user should be read, otherwise, restore the input
+			for (let i = 0; i < Math.abs(stepNumber) && this.running; i++) {
+				this.currentIteration++;
+				this.executeNextInstruction(
+					this.currentIteration == this.snapshot.length
+				);
+			}
+		} else {
+			// New State should not be less than 0
+			let newState = Math.max(this.currentIteration + stepNumber, 0);
+			this.restorePrevState(newState);
+			this.currentIteration = newState;
+		}
+	}
+
+	restorePrevState(newState) {
+		let log = this.snapshot[newState];
+
+		// Restore old pc
+		this.pc = log.pc;
+
+		// Restore old flags
+		this.c = log.flags.c;
+		this.v = log.flags.v;
+		this.n = log.flags.n;
+		this.z = log.flags.z;
+
+		// Restore old register values
+		for (let i = 0; i < 8; i++) this.r[i] = log.registers[i];
+
+		// Undo any changes to memory
+		for (let i = this.currentIteration; i >= newState; i--) {
+			if( this.snapshot[i].memory.hasChanged) {
+				this.restorePrevMemory(i);
+			}
+		}
+	}
+
+	restorePrevMemory(state) {
+		// console.log("TEST: ", this.snapshot[state], state);
+		// console.log("MEMORY: ", this.snapshot[state].memory);
+
+		let oldMem = this.snapshot[state].memory;
+		if (oldMem.address != null) {
+			let oldValues = oldMem.data;
+			for (let i = 0; i < oldValues.length; i++) {
+				this.mem[oldMem.address + i] = oldValues[i];
+			}
+		}
+	}
+
+	DEBUG_printMemory(address, size) {
+		console.log("MEMORY: ", this.mem.slice(address, address + size));
+	}
+
 	stateUpdates(oldIteration, newIteration) {
 		oldIteration = Math.max(oldIteration, 0);
 		newIteration = Math.max(newIteration, 0);
-		console.log("State Updates: ", oldIteration, newIteration);
+		// console.log("State Updates: ", oldIteration, newIteration);
 
 		let update = {
 			registers: {old: this.snapshot[oldIteration].registers, new: this.snapshot[newIteration].registers},
@@ -459,220 +529,236 @@ class Interpreter {
 		return update;
 	}
 
-	newDisplayInteractiveMode(listing, update) {
-		// What register should the stack display relative to
-		let relativeAddress = update.registers.new[5];
-		// How many memory addresses should be displayed under the relative address
-		let displaySize = 4;
+	    newDisplayInteractiveMode(listing, update) {
+        // What register should the stack display relative to
+        let relativeAddress = update.registers.new[5];
+        // How many memory addresses should be displayed under the relative address
+        let displaySize = 4;
 
-		let stackAddress = 0xfff3;
-		if(relativeAddress < 0xffff - displaySize && relativeAddress != 0) {
-			stackAddress = relativeAddress - 8;
-		}
+        let stackAddress = 0xfff3;
+        if(relativeAddress < 0xffff - displaySize && relativeAddress != 0) {
+            stackAddress = Math.max(relativeAddress - 8, 0);
+        }
 
-		let fp = update.registers.new[5];
-		let sp = update.registers.new[6];
+        let fp = update.registers.new[5];
+        let sp = update.registers.new[6];
 
-		let outputString = "";
-		console.log("+-----------------+--------------+-------------+");
-		console.log("|    Registers    | Stack:  Addr |   Memory    |");
-		console.log("+-----------------+-------+------+-------------+");
-		// Handle base registers
-		for (let i = 0; i < 8; i++) {
-			outputString = "";
-			let oldRegValue = update.registers.old[i].toString(16).padStart(4, "0");
-			let newRegValue = update.registers.new[i].toString(16).padStart(4, "0");
-			if( oldRegValue !== newRegValue) {
-				outputString = `| r${i.toString()}: ${oldRegValue} > ${newRegValue} | `;
-			}
-			else {
-				outputString = `| r${i.toString()}: ${newRegValue}        | `;
-			}
+        let outputString = "";
+        console.log("\n┌─────────────────┬──────────────┬─────────────┐");
+        console.log("│    Registers    │ Stack:  Addr │   Memory    │");
+        console.log("├─────────────────┼───────┬──────┼─────────────┤");
+        // Handle base registers
+        for (let i = 0; i < 8; i++) {
+            outputString = "";
+            let oldRegValue = update.registers.old[i].toString(16).padStart(4, "0");
+            let newRegValue = update.registers.new[i].toString(16).padStart(4, "0");
+            if( oldRegValue !== newRegValue) {
+                outputString = `│ r${i.toString()}: ${oldRegValue} > ${newRegValue} │ `;
+            }
+            else {
+                outputString = `│ r${i.toString()}: ${newRegValue}        │ `;
+            }
 
-			if(fp == sp && fp == stackAddress) {
-				outputString += "fpsp> | ";
-			}
-			else if(fp == stackAddress) {
-				outputString += "  fp> | ";
-			}
-			else if(sp == stackAddress) {
-				outputString += "  sp> | ";
-			}
-			else {
-				outputString += "      | ";
-			}
+            if(fp == sp && fp == stackAddress) {
+                outputString += "fpsp> │ ";
+            }
+            else if(fp == stackAddress) {
+                outputString += "  fp> │ ";
+            }
+            else if(sp == stackAddress) {
+                outputString += "  sp> │ ";
+            }
+            else {
+                outputString += "      │ ";
+            }
+            outputString += `${stackAddress.toString(16).padStart(4, "0")} │ `;
+            if(stackAddress in update.memory) {
+                let oldMemValue = update.memory[stackAddress].old;
+                let newMemValue = update.memory[stackAddress].new;
+                outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} │ `;
+            }
+            else {
+                let memValue = this.mem[stackAddress];
+                outputString += `${memValue.toString(16).padStart(4, "0")}        │ `;
+            }
+            
 
-			outputString += `${stackAddress.toString(16).padStart(4, "0")} | `;
+            stackAddress++;
+            console.log(outputString);
+        }
 
-			if(stackAddress in update.memory) {
-				let oldMemValue = update.memory[stackAddress].old;
-				let newMemValue = update.memory[stackAddress].new;
-				outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} | `;
-			}
-			else {
-				let memValue = this.mem[stackAddress];
-				outputString += `${memValue.toString(16).padStart(4, "0")}        | `;
-			}
-			
+        // Handle special registers
+        for (let i = 5; i < 8; i++) {
+            outputString = "";
+            let registerName = ["fp", "sp", "lr"][i - 5];
+            let oldRegValue = update.registers.old[i].toString(16).padStart(4, "0");
+            let newRegValue = update.registers.new[i].toString(16).padStart(4, "0");
+            if( oldRegValue !== newRegValue) {
+                outputString = `│ ${registerName}: ${oldRegValue} > ${newRegValue} │ `;
+            }
+            else {
+                outputString = `│ ${registerName}: ${newRegValue}        │ `;
+            }
 
-			stackAddress++;
-			console.log(outputString);
-		}
+            if(fp == sp && fp == stackAddress) {
+                outputString += "fpsp> │ ";
+            }
+            else if(fp == stackAddress) {
+                outputString += "  fp> │ ";
+            }
+            else if(sp == stackAddress) {
+                outputString += "  sp> │ ";
+            }
+            else {
+                outputString += "      │ ";
+            }
 
-		// Handle special registers
-		for (let i = 5; i < 8; i++) {
-			outputString = "";
-			let registerName = ["fp", "sp", "lr"][i - 5];
-			let oldRegValue = update.registers.old[i].toString(16).padStart(4, "0");
-			let newRegValue = update.registers.new[i].toString(16).padStart(4, "0");
-			if( oldRegValue !== newRegValue) {
-				outputString = `| ${registerName}: ${oldRegValue} > ${newRegValue} | `;
-			}
-			else {
-				outputString = `| ${registerName}: ${newRegValue}        | `;
-			}
+            outputString += `${stackAddress.toString(16).padStart(4, "0")} │ `;
 
-			if(fp == sp && fp == stackAddress) {
-				outputString += "fpsp> | ";
-			}
-			else if(fp == stackAddress) {
-				outputString += "  fp> | ";
-			}
-			else if(sp == stackAddress) {
-				outputString += "  sp> | ";
-			}
-			else {
-				outputString += "      | ";
-			}
+            if(stackAddress in update.memory) {
+                let oldMemValue = update.memory[stackAddress].old;
+                let newMemValue = update.memory[stackAddress].new;
+                outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} │ `;
+            }
+            else {
+                let memValue = this.mem[stackAddress];
+                outputString += `${memValue.toString(16).padStart(4, "0")}        │ `;
+            }
 
-			outputString += `${stackAddress.toString(16).padStart(4, "0")} | `;
+            stackAddress++;
+            console.log(outputString);
+        }
 
-			if(stackAddress in update.memory) {
-				let oldMemValue = update.memory[stackAddress].old;
-				let newMemValue = update.memory[stackAddress].new;
-				outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} | `;
-			}
-			else {
-				let memValue = this.mem[stackAddress];
-				outputString += `${memValue.toString(16).padStart(4, "0")}        | `;
-			}
+        // Handle pc
+        let oldPcValue = update.pc.old.toString(16).padStart(4, "0");
+        let newPcValue = update.pc.new.toString(16).padStart(4, "0");
 
-			stackAddress++;
-			console.log(outputString);
-		}
+        outputString = "";
+        if( oldPcValue !== newPcValue) {
+            outputString = `│ pc: ${oldPcValue} > ${newPcValue} │ `;
+        }
+        else {
+            outputString = `│ pc: ${newPcValue}        │ `;
+        }
 
-		// Handle pc
-		let oldPcValue = update.pc.old.toString(16).padStart(4, "0");
-		let newPcValue = update.pc.new.toString(16).padStart(4, "0");
+        if(fp == sp && fp == stackAddress) {
+            outputString += "fpsp> │ ";
+        }
+        else if(fp == stackAddress) {
+            outputString += "  fp> │ ";
+        }
+        else if(sp == stackAddress) {
+            outputString += "  sp> │ ";
+        }
+        else {
+            outputString += "      │ ";
+        }
 
-		outputString = "";
-		if( oldPcValue !== newPcValue) {
-			outputString = `| pc: ${oldPcValue} > ${newPcValue} | `;
-		}
-		else {
-			outputString = `| pc: ${newPcValue}        | `;
-		}
+        outputString += `${stackAddress.toString(16).padStart(4, "0")} │ `;
 
-		if(fp == sp && fp == stackAddress) {
-			outputString += "fpsp> | ";
-		}
-		else if(fp == stackAddress) {
-			outputString += "  fp> | ";
-		}
-		else if(sp == stackAddress) {
-			outputString += "  sp> | ";
-		}
-		else {
-			outputString += "      | ";
-		}
+        if(stackAddress in update.memory) {
+            let oldMemValue = update.memory[stackAddress].old;
+            let newMemValue = update.memory[stackAddress].new;
+            outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} │ `;
+        }
+        else {
+            let memValue = this.mem[stackAddress];
+            outputString += `${memValue.toString(16).padStart(4, "0")}        │ `;
+        }
 
-		outputString += `${stackAddress.toString(16).padStart(4, "0")} | `;
+        stackAddress++;
+        console.log(outputString);
 
-		if(stackAddress in update.memory) {
-			let oldMemValue = update.memory[stackAddress].old;
-			let newMemValue = update.memory[stackAddress].new;
-			outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} | `;
-		}
-		else {
-			let memValue = this.mem[stackAddress];
-			outputString += `${memValue.toString(16).padStart(4, "0")}        | `;
-		}
+        // Handle ir
+        let oldIrValue = update.ir.old.toString(16).padStart(4, "0");
+        let newIrValue = update.ir.new.toString(16).padStart(4,	"0");
+        outputString = "";
+        if( oldIrValue !== newIrValue) {
+            outputString = `│ ir: ${oldIrValue} > ${newIrValue} │ `;
+        }
+        else {
+            outputString = `│ ir: ${newIrValue}        │ `;
+        }
 
-		stackAddress++;
-		console.log(outputString);
+        if(fp == sp && fp == stackAddress) {
+            outputString += "fpsp> │ ";
+        }
+        else if(fp == stackAddress) {
+            outputString += "  fp> │ ";
+        }
+        else if(sp == stackAddress) {
+            outputString += "  sp> │ ";
+        }
+        else {
+            outputString += "      │ ";
+        }
 
-		// Handle ir
-		let oldIrValue = update.ir.old.toString(16).padStart(4, "0");
-		let newIrValue = update.ir.new.toString(16).padStart(4,	"0");
-		outputString = "";
-		if( oldIrValue !== newIrValue) {
-			outputString = `| ir: ${oldIrValue} > ${newIrValue} | `;
-		}
-		else {
-			outputString = `| ir: ${newIrValue}        | `;
-		}
+        outputString += `${stackAddress.toString(16).padStart(4, "0")} │ `;
 
-		if(fp == sp && fp == stackAddress) {
-			outputString += "fpsp> | ";
-		}
-		else if(fp == stackAddress) {
-			outputString += "  fp> | ";
-		}
-		else if(sp == stackAddress) {
-			outputString += "  sp> | ";
-		}
-		else {
-			outputString += "      | ";
-		}
+        if(stackAddress in update.memory) {
+            let oldMemValue = update.memory[stackAddress].old;
+            let newMemValue = update.memory[stackAddress].new;
+            outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} │ `;
+        }
+        else {
+            let memValue = this.mem[stackAddress];
+            outputString += `${memValue.toString(16).padStart(4, "0")}        │ `;
+        }
 
-		outputString += `${stackAddress.toString(16).padStart(4, "0")} | `;
+        stackAddress++;
+        console.log(outputString);
 
-		if(stackAddress in update.memory) {
-			let oldMemValue = update.memory[stackAddress].old;
-			let newMemValue = update.memory[stackAddress].new;
-			outputString += `${oldMemValue.toString(16).padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} | `;
-		}
-		else {
-			let memValue = this.mem[stackAddress];
-			outputString += `${memValue.toString(16).padStart(4, "0")}        | `;
-		}
+        console.log("├──────────┬──────┴─┬─────┴──┬───┴────┬────────┤");
 
-		stackAddress++;
-		console.log(outputString);
+        // Handle flags
+        outputString = "│  Flags:  │";
+        if (update.flags.old.c !== update.flags.new.c) {
+            outputString += ` c: ${update.flags.old.c}>${update.flags.new.c} │`;
+        }
+        else {
+            outputString += ` c: ${update.flags.new.c}   │`;
+        }
+        if (update.flags.old.v !== update.flags.new.v) {
+            outputString += ` v: ${update.flags.old.v}>${update.flags.new.v} │`;
+        }
+        else {
+            outputString += ` v: ${update.flags.new.v}   │`;
+        }
+        if (update.flags.old.n !== update.flags.new.n) {
+            outputString += ` n: ${update.flags.old.n}>${update.flags.new.n} │`;
+        }
+        else {
+            outputString += ` n: ${update.flags.new.n}   │`;
+        }
+        if (update.flags.old.z !== update.flags.new.z) {
+            outputString += ` z: ${update.flags.old.z}>${update.flags.new.z} │`;
+        }
+        else {
+            outputString += ` z: ${update.flags.new.z}   │`;
+        }
+        console.log(outputString);
+        console.log("├──────────┴────────┴────────┴────────┴────────┤");
 
-		console.log("+----------+------+-+-----+--+---+----+--------+");
-
-		// Handle flags
-		outputString = "|  Flags:  |";
-		if (update.flags.old.c !== update.flags.new.c) {
-			outputString += ` c: ${update.flags.old.c}>${update.flags.new.c} |`;
-		}
-		else {
-			outputString += ` c: ${update.flags.new.c}   |`;
-		}
-		if (update.flags.old.v !== update.flags.new.v) {
-			outputString += ` v: ${update.flags.old.v}>${update.flags.new.v} |`;
-		}
-		else {
-			outputString += ` v: ${update.flags.new.v}   |`;
-		}
-		if (update.flags.old.n !== update.flags.new.n) {
-			outputString += ` n: ${update.flags.old.n}>${update.flags.new.n} |`;
-		}
-		else {
-			outputString += ` n: ${update.flags.new.n}   |`;
-		}
-		if (update.flags.old.z !== update.flags.new.z) {
-			outputString += ` z: ${update.flags.old.z}>${update.flags.new.z} |`;
-		}
-		else {
-			outputString += ` z: ${update.flags.new.z}   |`;
-		}
-		console.log(outputString);
-		console.log("+----------+--------+--------+--------+--------+");
-
-
-	}
+        console.log("├───────────────┤ Code Snippet ├───────────────┤");
+        for(let i = -2; i <= 2; i++) {
+            let lineNumber = update.pc.new + i;
+            if(lineNumber < 0 || lineNumber > 0xffff) continue;
+            if(lineNumber in listing) {
+                let codeLine = listing[lineNumber].sourceLine.replace(/\t/g, '    ').trimEnd();
+				if(codeLine.length > 42) {
+					codeLine = codeLine.slice(0, 39) + '...';
+                }
+                if(lineNumber === update.pc.new) {
+                    codeLine = `> ${codeLine}`;
+                } else {
+                    codeLine = `  ${codeLine}`;
+                }
+                outputString = "│ " + codeLine.padEnd(44) + " │";
+                console.log(outputString);
+            }
+        }
+        console.log("└──────────────────────────────────────────────┘");
+    }
 
 	displayInteractiveMode(listing) {
 		console.log(
@@ -691,67 +777,7 @@ class Interpreter {
 		// console.log(listing[this.snapshot[this.currentIteration - 1].pc]);
 	}
 
-	handleSteps(stepNumber) {
-		if(stepNumber === 0) {
-			// Reprint current state
-			return;
-		}
-		// Check if new instructions are to be executed
-		if (stepNumber > 0) {
-			// When true, new inputs from user should be read, otherwise, restore the input
-			for (let i = 0; i < Math.abs(stepNumber) && this.running; i++) {
-				this.executeNextInstruction(
-					this.currentIteration == this.snapshot.length
-				);
-				this.currentIteration++;
-			}
-		} else {
-			// New State should not be less than 0
-			let newState = Math.max(this.currentIteration + stepNumber, 0);
-			this.restorePrevState(newState);
-			this.currentIteration = newState;
-		}
-	}
-
-	restorePrevState(newState) {
-		let log = this.snapshot[newState];
-
-		// Restore old pc
-		this.pc = log.pc;
-
-		// Restore old flags
-		this.c = log.flags.c;
-		this.v = log.flags.v;
-		this.n = log.flags.n;
-		this.z = log.flags.z;
-
-		// Restore old register values
-		for (let i = 0; i < 8; i++) this.r[i] = log.registers[i];
-
-		// Undo any changes to memory
-		for (let i = this.currentIteration - 1; i >= newState; i--) {
-			if( this.snapshot[i].memory.hasChanged) {
-				this.restorePrevMemory(i);
-			}
-		}
-	}
-
-	restorePrevMemory(state) {
-		// console.log("TEST: ", this.snapshot[state], state);
-		// console.log("MEMORY: ", this.snapshot[state].memory);
-
-		let oldMem = this.snapshot[state].memory;
-		if (oldMem.address != null) {
-			let oldValues = oldMem.data;
-			for (let i = 0; i < oldValues.length; i++) {
-				this.mem[oldMem.address + i] = oldValues[i];
-			}
-		}
-	}
-
-	DEBUG_printMemory(address, size) {
-		console.log("MEMORY: ", this.mem.slice(address, address + size));
-	}
+	
 
 	executeNextInstruction(readInNewInput) {
 		// Fetch instruction
