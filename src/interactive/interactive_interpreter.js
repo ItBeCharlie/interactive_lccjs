@@ -372,19 +372,28 @@ class Interpreter {
     this.spInitial = this.r[6]; // Assuming r6 is the stack pointer
 
     let update;
-    this.initializeLog();
-    update = this.stateUpdates(0, 0);
-    this.newDisplayInteractiveMode(listing, update);
+    let newlineCount = 0;
     let memoryDisplayRows = 10; // Number of memory rows to display
     let memoryBaseAddress = 0; // Base address for memory display
     let stepNumber = 0; // Number of steps to execute
 
+    if (interactiveMode) {
+      this.initializeLog();
+      update = this.stateUpdates(0, 0);
+      newlineCount = this.newDisplayInteractiveMode(listing, update);
+    }
+    this.lineLength = 0;
+
+    console.log(
+      "\nEnter number of steps to execute.\nPositive to step forward, negative to step back, \n0 to reprint current state.\nAdd 'm' to the end of a hex number to display memory \nfrom that address (e.g., 1m, 10m, ff0m):"
+    );
+    newlineCount += 6;
+
     while (this.running) {
       if (interactiveMode) {
         // console.log("\nCurrent iteration: ", this.currentIteration);
-        console.log(
-          "\nEnter number of steps to execute (positive to step forward, negative to step back, 0 to reprint current state)\nAdd 'm' to the end of a hex number to display memory from that address (e.g., 1m, 10m, ff0m):"
-        );
+        process.stdout.write("Steps: ");
+        newlineCount++;
         let input = this.readLineFromStdin();
         // I want to detect if the input line ends with "m"
         if (input.inputLine.endsWith("m")) {
@@ -398,14 +407,16 @@ class Interpreter {
           let match = input.inputLine.match(/-?\d+/);
           if (match) {
             stepNumber = parseInt(match[0], 10);
-            console.log(stepNumber, match);
           } else {
             console.error("Invalid input. Please enter a number.");
+            newlineCount++;
             continue; // Skip to the next iteration of the loop
           }
         }
+        this.clearLines(newlineCount);
+
         let originalIteration = this.currentIteration;
-        console.log("├──────────────────┤ Output ├──────────────────┤");
+        // console.log("├──────────────────┤ Output ├──────────────────┤");
         this.handleSteps(stepNumber);
         let newIteration = this.currentIteration;
 
@@ -416,7 +427,7 @@ class Interpreter {
 
         // this.displayInteractiveMode(listing);
         // console.log(update);
-        this.newDisplayInteractiveMode(
+        newlineCount = this.newDisplayInteractiveMode(
           listing,
           update,
           memoryBaseAddress,
@@ -428,6 +439,12 @@ class Interpreter {
         this.handleSteps(1);
       }
     }
+  }
+
+  clearLines(linesToClear) {
+    // Move cursor to end of last output and clear all lines to end of screen
+    process.stdout.write(`\x1b[${linesToClear}A\x1b[${this.lineLength + 1}C`);
+    process.stdout.write("\x1b[0J");
   }
 
   handleSteps(stepNumber) {
@@ -569,7 +586,13 @@ class Interpreter {
     let fp = update.registers.new[5];
     let sp = update.registers.new[6];
 
-    let outputString = "\n┌─────────────────┬──────────────┬─────────────┐";
+    let outputString = "";
+
+    if (this.terminalOutput) {
+      outputString = "\n";
+    }
+
+    outputString += "\n┌─────────────────┬──────────────┬─────────────┐";
     outputString += "\n│    Registers    │ Stack:  Addr │   Memory    │";
     outputString += "\n├─────────────────┼───────┬──────┼─────────────┤";
     // Handle base registers
@@ -637,11 +660,10 @@ class Interpreter {
         outputString += `│ ${flag}: ${update.flags.new[flag]}   `;
       }
     }
-    outputString += "│\n└──────────┴────────┴────────┴────────┴────────┘";
-    console.log(outputString);
+    outputString += "│\n└──────────┴────────┴────────┴────────┴────────┘\n";
 
     // Code snippet display
-    outputString = "┌───────────────┤ Code Snippet ├───────────────┐\n";
+    outputString += "┌───────────────┤ Code Snippet ├───────────────┐\n";
     for (let i = -2; i <= 2; i++) {
       let lineNumber = update.pc.new + i;
       if (lineNumber < 0 || lineNumber > 0xffff) continue;
@@ -660,11 +682,10 @@ class Interpreter {
         outputString += "│ " + codeLine.padEnd(44) + " │\n";
       }
     }
-    outputString += "└──────────────────────────────────────────────┘";
-    console.log(outputString);
+    outputString += "└──────────────────────────────────────────────┘\n";
 
     // Memory display
-    outputString = "┌────┬─────────┤ Memory Display ├──────────────┐\n";
+    outputString += "┌────┬─────────┤ Memory Display ├──────────────┐\n";
     outputString +=
       "│\x1b[4mAddr│  +0   +1   +2   +3   +4   +5   +6   +7  \x1b[0m│\n";
     for (let i = 0; i < 8 * memoryRows; i++) {
@@ -688,6 +709,9 @@ class Interpreter {
     }
     outputString += "└────┴─────────────────────────────────────────┘";
     console.log(outputString);
+    // Count how many newline characters are in the outputString
+    const newlineCount = (outputString.match(/\n/g) || []).length;
+    return newlineCount + 1; // +1 for the final newline by console.log
   }
 
   displayInteractiveMode(listing) {
@@ -1270,7 +1294,9 @@ class Interpreter {
       this.writeOutput(char);
       address = (address + 1) & 0xffff;
       charCode = this.mem[address];
+      this.lineLength += 1;
     }
+    this.terminalOutput = true;
   }
 
   readLineFromStdin() {
@@ -1486,6 +1512,8 @@ class Interpreter {
     } else {
       process.stdout.write(message);
     }
+    this.terminalOutput = true;
+    this.lineLength += message.length;
     this.output += message;
   }
 
@@ -1495,6 +1523,7 @@ class Interpreter {
         this.running = false;
         break;
       case 1: // NL
+        this.lineLength = 0;
         this.writeOutput(newline);
         break;
       case 2: // DOUT
