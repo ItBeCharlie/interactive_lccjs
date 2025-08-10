@@ -529,7 +529,7 @@ class Interpreter {
 		return update;
 	}
 
-	    newDisplayInteractiveMode(listing, update) {
+	    newDisplayInteractiveMode(listing, update, baseMemAddress=0, memoryRows=10) {
         // What register should the stack display relative to
         let relativeAddress = update.registers.new[5];
         // How many memory addresses should be displayed under the relative address
@@ -758,7 +758,28 @@ class Interpreter {
             }
         }
         console.log("└──────────────────────────────────────────────┘");
-    }
+		
+
+		// Memory display
+		console.log("┌────┬─────────┤ Memory Display ├─────────────┐");
+		console.log("│\x1b[4mAddr│  +0   +1   +2   +3   +4   +5   +6   +7 \x1b[0m│");
+		for (let i = 0; i < 8*memoryRows; i++) {
+			let addr = baseMemAddress + i;
+			if (addr > 0xffff) {
+				break; // Stop if we exceed the maximum memory address
+			}
+			let value = this.mem[addr] !== undefined ? this.mem[addr].toString(16).padStart(4, "0") : "xxxx";
+			if (i % 8 === 0) {
+				process.stdout.write(`│${addr.toString(16).padStart(4, "0")}│`);
+			}
+			process.stdout.write(` ${value}`);
+			if (i % 8 === 7) {
+				process.stdout.write("│\n");
+			}
+		}
+		console.log("└────┴────────────────────────────────────────┘");
+
+	}
 
 	displayInteractiveMode(listing) {
 		console.log(
