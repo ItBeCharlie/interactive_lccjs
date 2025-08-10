@@ -236,7 +236,7 @@ class Assembler {
 			this.lineNum = 0;
 			this.performPass();
 
-			console.log(this.listing);
+			// console.log(this.listing);
 
 			// After Pass 2
 			if (this.isObjectModule) {
