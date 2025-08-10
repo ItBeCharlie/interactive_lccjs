@@ -235,7 +235,6 @@ class LCC {
 	// Will update the listing map to contain the source code for each location in the program
 	createListingMap(fileType) {
 		let listingMap = {};
-		console.log(this.assembler.listing);
 		for (let i = 0; i < this.assembler.listing.length; i++) {
 			const entry = this.assembler.listing[i];
 			switch (fileType) {
