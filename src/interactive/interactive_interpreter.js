@@ -386,6 +386,7 @@ class Interpreter {
     // Register mode will follow a relative, static mode will stay fixed at a given address
     let stepNumber = 1; // Number of steps to execute
     let lastStepNumber = stepNumber;
+    let skipSteps = false;
 
     if (this.options.interactiveMode) {
       this.initializeLog();
@@ -416,91 +417,48 @@ class Interpreter {
 
     while (this.running) {
       if (this.options.interactiveMode) {
-        // console.log("\nCurrent iteration: ", this.currentIteration);
         process.stdout.write("Input: ");
         newlineCount++;
         lastStepNumber = stepNumber;
+        skipSteps = false;
         let input = this.readLineFromStdin();
-        // Set Memory Display base
-        if (input.inputLine.startsWith("m")) {
-          // If it does, extract the number after "m"
-          let match = input.inputLine.match(/m([0-9a-fA-F]+)$/);
-          if (match) {
-            memoryBaseAddress = parseInt(match[1], 16);
-            stepNumber = 0; // No steps to execute, just display memory
-          } else {
-            console.error("Invalid input. Please enter a number.");
-            newlineCount++;
-            continue; // Skip to the next iteration of the loop
-          }
-          // Set Stack Display base
-        } else if (input.inputLine.startsWith("s")) {
-          stepNumber = 0; // No steps to execute, just display memory
-          let stackOption = input.inputLine.substring(1);
-          switch (stackOption) {
-            case "r0":
-              stackOptions.register = 0;
-              stackOptions.mode = "relative";
-              break;
-            case "r1":
-              stackOptions.register = 1;
-              stackOptions.mode = "relative";
-              break;
-            case "r2":
-              stackOptions.register = 2;
-              stackOptions.mode = "relative";
-              break;
-            case "r3":
-              stackOptions.register = 3;
-              stackOptions.mode = "relative";
-              break;
-            case "r4":
-              stackOptions.register = 4;
-              stackOptions.mode = "relative";
-              break;
-            case "r5":
-            case "fp":
-              stackOptions.register = 5;
-              stackOptions.mode = "relative";
-              break;
-            case "r6":
-            case "sp":
-              stackOptions.register = 6;
-              stackOptions.mode = "relative";
-              break;
-            case "r7":
-            case "lr":
-              stackOptions.register = 7;
-              stackOptions.mode = "relative";
-              break;
-            default:
-              if (/^(0x)?[0-9a-fA-F]+$/.test(stackOption)) {
-                stackOptions.stackBaseAddress = parseInt(stackOption, 16);
-                stackOptions.mode = "static";
-              } else {
-                console.error(
-                  "Invalid input. Please enter a number or register."
-                );
-                newlineCount++;
-                continue; // Skip to the next iteration of the loop
-              }
-          }
-        } else if (input.inputLine == "") {
-          stepNumber = lastStepNumber;
-        } else {
-          let match = input.inputLine.match(/-?\d+/);
-          if (match) {
-            stepNumber = parseInt(match[0], 10);
-          } else {
-            console.error("Invalid input. Please enter a number.");
-            newlineCount++;
-            continue; // Skip to the next iteration of the loop
-          }
+        let output;
+
+        switch (input.inputLine[0]) {
+          case "m":
+            output = this.handleMemoryInput(input.inputLine.substring(1));
+            if (output.error == "") {
+              memoryBaseAddress = output.memoryBaseAddress;
+              skipSteps = true;
+            }
+            break;
+          case "s":
+            output = this.handleStackInput(input.inputLine.substring(1));
+            if (output.error == "") {
+              stackOptions = output.stackOptions;
+              skipSteps = true;
+            }
+            break;
+          case "h":
+          case "w":
+            this.handlePaneAdjustment(input.inputLine);
+          default:
+            output = this.handleStepsInput(input.inputLine, lastStepNumber);
+            if (output == "") {
+              stepNumber = output.stepNumber;
+            }
         }
+
+        if (output.error != "") {
+          console.error(output.error);
+          newlineCount++;
+          continue;
+        }
+
         this.clearLines(newlineCount);
 
         let originalIteration = this.currentIteration;
-        this.handleSteps(stepNumber);
+        if (!skipSteps) this.handleSteps(stepNumber);
         let newIteration = this.currentIteration;
 
         update = this.stateUpdates(originalIteration, newIteration);
@@ -517,6 +475,94 @@ class Interpreter {
         this.handleSteps(1);
       }
     }
+  }
+
+  isHexNumber(input) {
+    return /^(0x)?[0-9a-fA-F]+$/.test(input);
+  }
+
+  isDecNumber(input) {
+    return /-?\d+/.test(input);
+  }
+
+  handleMemoryInput(inputLine) {
+    // If it does, extract the number after "m"
+
+    let output = { error: "" };
+
+    if (this.isHexNumber(inputLine)) {
+      output.memoryBaseAddress = parseInt(inputLine, 16);
+    } else {
+      output.error = "Invalid input. Please enter a number.";
+    }
+
+    return output;
+  }
+
+  handleStackInput(inputLine) {
+    let stackOptions = {};
+    let output = { error: "", stackOptions: stackOptions };
+    switch (inputLine) {
+      case "r0":
+        stackOptions.register = 0;
+        stackOptions.mode = "relative";
+        break;
+      case "r1":
+        stackOptions.register = 1;
+        stackOptions.mode = "relative";
+        break;
+      case "r2":
+        stackOptions.register = 2;
+        stackOptions.mode = "relative";
+        break;
+      case "r3":
+        stackOptions.register = 3;
+        stackOptions.mode = "relative";
+        break;
+      case "r4":
+        stackOptions.register = 4;
+        stackOptions.mode = "relative";
+        break;
+      case "r5":
+      case "fp":
+        stackOptions.register = 5;
+        stackOptions.mode = "relative";
+        break;
+      case "r6":
+      case "sp":
+        stackOptions.register = 6;
+        stackOptions.mode = "relative";
+        break;
+      case "r7":
+      case "lr":
+        stackOptions.register = 7;
+        stackOptions.mode = "relative";
+        break;
+      default:
+        if (this.isHexNumber(inputLine)) {
+          stackOptions.stackBaseAddress = parseInt(inputLine, 16);
+          stackOptions.mode = "static";
+        } else {
+          output.error = "Invalid input. Please enter a number or register.";
+        }
+    }
+    return output;
+  }
+
+  handlePaneAdjustment(inputLine) {
+    // TODO: Implement pane adjustment logic
+  }
+
+  handleStepsInput(inputLine, lastStepNumber) {
+    let output = { error: "" };
+    if (inputLine == "") {
+      output.stepNumber = lastStepNumber;
+    } else if (this.isDecNumber(inputLine)) {
+      stepNumber = parseInt(match[0], 10);
+    } else {
+      output.error = "Invalid input. Please enter a number.";
+    }
+    return output;
   }
 
   clearLines(linesToClear) {
