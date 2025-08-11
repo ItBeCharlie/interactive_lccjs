@@ -447,6 +447,10 @@ class Interpreter {
               skipSteps = true;
             }
             break;
+          case "q":
+            this.running = false;
+            output = { error: "" };
+            break;
           case "t":
           case "w":
             displayStyle = input.inputLine[0];
@@ -578,7 +582,7 @@ class Interpreter {
     if (inputLine == "") {
       output.stepNumber = lastStepNumber;
     } else if (this.isDecNumber(inputLine)) {
-      stepNumber = parseInt(match[0], 10);
+      output.stepNumber = parseInt(inputLine, 10);
     } else {
       output.error = "Invalid input. Please enter a number.";
     }
