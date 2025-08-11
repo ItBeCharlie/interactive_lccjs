@@ -380,7 +380,7 @@ class Interpreter {
     if (interactiveMode) {
       this.initializeLog();
       update = this.stateUpdates(0, 0);
-      newlineCount = this.newDisplayInteractiveMode(listing, update);
+      newlineCount = this.displayInteractiveMode(listing, update);
     }
     this.lineLength = 0;
 
@@ -416,24 +416,17 @@ class Interpreter {
         this.clearLines(newlineCount);
 
         let originalIteration = this.currentIteration;
-        // console.log("├──────────────────┤ Output ├──────────────────┤");
         this.handleSteps(stepNumber);
         let newIteration = this.currentIteration;
 
-        // console.log(this.snapshot);
-        // console.log("Original iteration: ", originalIteration);
-        // console.log("New iteration: ", newIteration);
         update = this.stateUpdates(originalIteration, newIteration);
 
-        // this.displayInteractiveMode(listing);
-        // console.log(update);
-        newlineCount = this.newDisplayInteractiveMode(
+        newlineCount = this.displayInteractiveMode(
           listing,
           update,
           memoryBaseAddress,
           memoryDisplayRows
         );
-        // console.log("currentIteration: ", this.currentIteration);
       } else {
         // Normal LCC execution, handle 1 step at a time until termination
         this.handleSteps(1);
@@ -498,15 +491,11 @@ class Interpreter {
 
     let oldMem = this.snapshot[state].memory;
     if (oldMem.address != null) {
-      let oldValues = oldMem.data;
+      let oldValues = oldMem.old;
       for (let i = 0; i < oldValues.length; i++) {
         this.mem[oldMem.address + i] = oldValues[i];
       }
     }
-  }
-
-  DEBUG_printMemory(address, size) {
-    console.log("MEMORY: ", this.mem.slice(address, address + size));
   }
 
   stateUpdates(oldIteration, newIteration) {
@@ -534,60 +523,52 @@ class Interpreter {
       memory: {},
     };
 
-    let start = oldIteration;
-    let end = newIteration;
-
-    if (oldIteration > newIteration) {
-      start = newIteration;
-      end = oldIteration;
-    }
-
-    // For memory changes, first go through all snapshots from oldIteration to newIteration and store which addresses were updated
-    let addressSet = new Set();
-    for (let i = start; i <= end; i++) {
-      let memoryChange = this.snapshot[i].memory;
-      if (memoryChange.hasChanged) {
-        let baseAddress = memoryChange.address;
-        let length = memoryChange.new.length;
-        for (let j = 0; j < length; j++) {
-          addressSet.add(baseAddress + j);
+    // Track all memory changes between two iterations
+    let changes = {};
+    if (oldIteration < newIteration) {
+      for (let i = newIteration; i > oldIteration; i--) {
+        let memoryChange = this.snapshot[i].memory;
+        if (memoryChange.hasChanged) {
+          let baseAddress = memoryChange.address;
+          let length = memoryChange.new.length;
+          for (let j = 0; j < length; j++) {
+            changes[baseAddress + j] = memoryChange.old[j];
+          }
+        }
+      }
+    } else {
+      for (let i = newIteration + 1; i <= oldIteration; i++) {
+        let memoryChange = this.snapshot[i].memory;
+        if (memoryChange.hasChanged) {
+          let baseAddress = memoryChange.address;
+          let length = memoryChange.new.length;
+          for (let j = 0; j < length; j++) {
+            changes[baseAddress + j] = memoryChange.new[j];
+          }
         }
       }
     }
-
-    // Next, go through each address flagged and compare the old and new values to see if an update occured
-    console.log("ADDRESSES: ", addressSet);
-    for (let address of addressSet) {
-      console.log(this.snapshot[newIteration].memory);
-
-      let baseAddress = this.snapshot[newIteration].memory.address;
-      let memoryIndex = address - baseAddress;
-      let oldValue = this.snapshot[newIteration].memory.old[memoryIndex];
-      let newValue = this.snapshot[newIteration].memory.new[memoryIndex];
-
-      if (oldValue !== newValue) {
-        console.log("NEW VALUE");
+    // Compare change values with this.mem to detect true changes
+    for (let address in changes) {
+      let oldValue = changes[address];
+      let newValue = this.mem[address];
+      if (oldValue != newValue) {
         update.memory[address] = { old: oldValue, new: newValue };
       }
     }
-    console.log("UPDATE");
-    console.log(update);
+
+    // console.log(update);
 
     return update;
   }
 
-  newDisplayInteractiveMode(
-    listing,
-    update,
-    baseMemAddress = 0,
-    memoryRows = 10
-  ) {
+  displayInteractiveMode(listing, update, baseMemAddress = 0, memoryRows = 10) {
     // What register should the stack display relative to
     let relativeAddress = update.registers.new[5];
     // How many memory addresses should be displayed under the relative address
     let displaySize = 4;
 
-    let stackAddress = 0xfff3;
+    let stackAddress = 0xfff2;
     if (relativeAddress < 0xffff - displaySize && relativeAddress != 0) {
       stackAddress = Math.max(relativeAddress - 8, 0);
     }
@@ -610,11 +591,11 @@ class Interpreter {
       outputString = "\n";
     }
 
-    outputString += "\n┌─────────────────┬──────────────┬─────────────┐";
-    outputString += "\n│    Registers    │ Stack:  Addr │   Memory    │";
-    outputString += "\n├─────────────────┼───────┬──────┼─────────────┤";
+    outputString += "\n┌─────────────────┬────────────────────────────┐";
+    outputString += "\n│    Registers    │ Stack ─ Addr ─── Memory    │";
+    outputString += "\n├─────────────────┼───────┬──────┬─────────────┤";
     // Handle base registers
-    for (let i = 0; i < 13; i++) {
+    for (let i = 0; i < 14; i++) {
       outputString += "\n";
       let oldRegValue = "";
       let newRegValue = "";
@@ -624,24 +605,28 @@ class Interpreter {
         oldRegValue = update.registers.old[i].toString(16).padStart(4, "0");
         newRegValue = update.registers.new[i].toString(16).padStart(4, "0");
         registerName = `r${i.toString()}`;
-      } else if (i >= 8 && i <= 10) {
-        oldRegValue = update.registers.old[i - 5].toString(16).padStart(4, "0");
-        newRegValue = update.registers.new[i - 5].toString(16).padStart(4, "0");
-        registerName = ["fp", "sp", "lr"][i - 8];
-      } else if (i === 11) {
+      } else if (i >= 9 && i <= 11) {
+        oldRegValue = update.registers.old[i - 4].toString(16).padStart(4, "0");
+        newRegValue = update.registers.new[i - 4].toString(16).padStart(4, "0");
+        registerName = ["fp", "sp", "lr"][i - 9];
+      } else if (i === 12) {
         oldRegValue = update.pc.old.toString(16).padStart(4, "0");
         newRegValue = update.pc.new.toString(16).padStart(4, "0");
         registerName = "pc";
-      } else if (i === 12) {
+      } else if (i === 13) {
         oldRegValue = update.ir.old.toString(16).padStart(4, "0");
         newRegValue = update.ir.new.toString(16).padStart(4, "0");
         registerName = "ir";
       }
 
-      if (oldRegValue !== newRegValue) {
-        outputString += `│ ${registerName}: ${colors.old}${oldRegValue}${colors.reset} > ${colors.new}${newRegValue}${colors.reset} │ `;
+      if (i === 8) {
+        outputString += `├─────────────────┤ `;
       } else {
-        outputString += `│ ${registerName}: ${newRegValue}        │ `;
+        if (oldRegValue !== newRegValue) {
+          outputString += `│ ${registerName}: ${colors.old}${oldRegValue}${colors.reset} > ${colors.new}${newRegValue}${colors.reset} │ `;
+        } else {
+          outputString += `│ ${registerName}: ${newRegValue}        │ `;
+        }
       }
 
       if (newfp == stackAddress) {
@@ -713,11 +698,11 @@ class Interpreter {
           codeLine = codeLine.slice(0, 39) + "...";
         }
         if (lineNumber === update.pc.new) {
-          codeLine = ` ${colors.new}${codeLine}${colors.reset}`.padEnd(52);
+          codeLine = `  ${colors.new}${codeLine}${colors.reset}`.padEnd(52);
         } else if (lineNumber === update.pc.old) {
-          codeLine = ` ${colors.old}${codeLine}${colors.reset}`.padEnd(52);
+          codeLine = `> ${colors.old}${codeLine}${colors.reset}`.padEnd(52);
         } else {
-          codeLine = ` ${codeLine}`.padEnd(44);
+          codeLine = `  ${codeLine}`.padEnd(44);
         }
         outputString += `│ ${codeLine} │\n`;
       }
@@ -752,18 +737,6 @@ class Interpreter {
     // Count how many newline characters are in the outputString
     const newlineCount = (outputString.match(/\n/g) || []).length;
     return newlineCount + 1; // +1 for the final newline by console.log
-  }
-
-  displayInteractiveMode(listing) {
-    console.log("\n\nCurUpdt: ", this.snapshot[this.currentIteration - 1]);
-    console.log("CurIter: ", this.currentIteration);
-    console.log(
-      "INST: ",
-      this.mem[this.snapshot[this.currentIteration - 1].pc].toString(16)
-    );
-    this.DEBUG_printMemory(0, 10);
-
-    // console.log(listing[this.snapshot[this.currentIteration - 1].pc]);
   }
 
   executeNextInstruction(readInNewInput) {
