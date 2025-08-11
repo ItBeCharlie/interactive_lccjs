@@ -485,6 +485,8 @@ class Interpreter {
                 continue; // Skip to the next iteration of the loop
               }
           }
+        } else if (input.inputLine == "") {
+          stepNumber = lastStepNumber;
         } else {
           let match = input.inputLine.match(/-?\d+/);
           if (match) {
@@ -495,7 +497,7 @@ class Interpreter {
             continue; // Skip to the next iteration of the loop
           }
         }
-        // this.clearLines(newlineCount);
+        this.clearLines(newlineCount);
 
         let originalIteration = this.currentIteration;
         this.handleSteps(stepNumber);
@@ -668,8 +670,6 @@ class Interpreter {
     }
 
     stackAddress = Math.max(0, Math.min(0xfff2, stackAddress));
-
-    console.log(stackOptions, stackAddress);
 
     let newfp = update.registers.new[5];
     let newsp = update.registers.new[6];
