@@ -795,10 +795,8 @@ class Interpreter {
         if (codeLine.length > 42) {
           codeLine = codeLine.slice(0, 39) + "...";
         }
-        if (lineNumber === update.pc.new - this.loadPoint) {
-          codeLine = `  ${colors.new}${codeLine}${colors.reset}`.padEnd(52);
-        } else if (lineNumber === update.pc.old - this.loadPoint) {
-          codeLine = `> ${colors.old}${codeLine}${colors.reset}`.padEnd(52);
+        if (lineNumber === update.pc.old - this.loadPoint) {
+          codeLine = `> ${codeLine}`.padEnd(44);
         } else {
           codeLine = `  ${codeLine}`.padEnd(44);
         }
