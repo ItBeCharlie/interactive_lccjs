@@ -437,21 +437,46 @@ class Interpreter {
         } else if (input.inputLine.startsWith("s")) {
           stepNumber = 0; // No steps to execute, just display memory
           let stackOption = input.inputLine.substring(1);
-          let match = stackOption.match(/([0-9a-fA-F]+)$/);
-          if (match) {
-            stackOptions.stackBaseAddress = parseInt(match[0], 16);
-            stackOptions.mode = "static";
-          } else {
-            match = stackOption.match(/(r[0-7]|fp|sp|lr)\b/g);
-            if (match) {
-              if (match[0].startsWith("r")) {
-                stackOptions.register = parseInt(match[0][1], 10);
-              } else if (match[0] == "fp") {
-                stackOptions.register = 5;
-              } else if (match[0] == "sp") {
-                stackOptions.register = 6;
-              } else if (match[0] == "lr") {
-                stackOptions.register = 7;
+          switch (stackOption) {
+            case "r0":
+              stackOptions.register = 0;
+              stackOptions.mode = "relative";
+              break;
+            case "r1":
+              stackOptions.register = 1;
+              stackOptions.mode = "relative";
+              break;
+            case "r2":
+              stackOptions.register = 2;
+              stackOptions.mode = "relative";
+              break;
+            case "r3":
+              stackOptions.register = 3;
+              stackOptions.mode = "relative";
+              break;
+            case "r4":
+              stackOptions.register = 4;
+              stackOptions.mode = "relative";
+              break;
+            case "r5":
+            case "fp":
+              stackOptions.register = 5;
+              stackOptions.mode = "relative";
+              break;
+            case "r6":
+            case "sp":
+              stackOptions.register = 6;
+              stackOptions.mode = "relative";
+              break;
+            case "r7":
+            case "lr":
+              stackOptions.register = 7;
+              stackOptions.mode = "relative";
+              break;
+            default:
+              if (/^(0x)?[0-9a-fA-F]+$/.test(stackOption)) {
+                stackOptions.stackBaseAddress = parseInt(stackOption, 16);
+                stackOptions.mode = "static";
               } else {
                 console.error(
                   "Invalid input. Please enter a number or register."
@@ -459,11 +484,7 @@ class Interpreter {
                 newlineCount++;
                 continue; // Skip to the next iteration of the loop
               }
-              stackOptions.mode = "relative";
-            }
           }
-        } else if (input.inputLine == "") {
-          stepNumber = lastStepNumber;
         } else {
           let match = input.inputLine.match(/-?\d+/);
           if (match) {
@@ -474,7 +495,7 @@ class Interpreter {
             continue; // Skip to the next iteration of the loop
           }
         }
-        this.clearLines(newlineCount);
+        // this.clearLines(newlineCount);
 
         let originalIteration = this.currentIteration;
         this.handleSteps(stepNumber);
@@ -647,6 +668,8 @@ class Interpreter {
     }
 
     stackAddress = Math.max(0, Math.min(0xfff2, stackAddress));
+
+    console.log(stackOptions, stackAddress);
 
     let newfp = update.registers.new[5];
     let newsp = update.registers.new[6];
