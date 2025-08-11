@@ -376,6 +376,7 @@ class Interpreter {
     let memoryDisplayRows = 10; // Number of memory rows to display
     let memoryBaseAddress = 0; // Base address for memory display
     let stepNumber = 0; // Number of steps to execute
+    let lastStepNumber = stepNumber;
 
     if (interactiveMode) {
       this.initializeLog();
@@ -394,6 +395,7 @@ class Interpreter {
         // console.log("\nCurrent iteration: ", this.currentIteration);
         process.stdout.write("Steps: ");
         newlineCount++;
+        lastStepNumber = stepNumber;
         let input = this.readLineFromStdin();
         // I want to detect if the input line ends with "m"
         if (input.inputLine.endsWith("m")) {
@@ -403,6 +405,8 @@ class Interpreter {
             memoryBaseAddress = parseInt(match[1], 16);
             stepNumber = 0; // No steps to execute, just display memory
           }
+        } else if (input.inputLine == "") {
+          stepNumber = lastStepNumber;
         } else {
           let match = input.inputLine.match(/-?\d+/);
           if (match) {
