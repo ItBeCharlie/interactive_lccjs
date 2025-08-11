@@ -670,18 +670,13 @@ class Interpreter {
     let oldfp = update.registers.old[5];
     let oldsp = update.registers.old[6];
 
-    let outputString = "";
+    let outputLines = [""];
 
-    if (this.terminalOutput) {
-      outputString = "\n";
-    }
-
-    outputString += "\n┌─────────────────┬────────────────────────────┐";
-    outputString += "\n│    Registers    │ Stack ─ Addr ─── Memory    │";
-    outputString += "\n├─────────────────┼───────┬──────┬─────────────┤";
+    outputLines.push("┌─────────────────┬────────────────────────────┐");
+    outputLines.push("│    Registers    │ Stack ─ Addr ─── Memory    │");
+    outputLines.push("├─────────────────┼───────┬──────┬─────────────┤");
     // Handle base registers
     for (let i = 0; i < 14; i++) {
-      outputString += "\n";
       let oldRegValue = "";
       let newRegValue = "";
       let registerName = "";
@@ -703,6 +698,8 @@ class Interpreter {
         newRegValue = update.ir.new.toString(16).padStart(4, "0");
         registerName = "ir";
       }
+
+      let outputString = "";
 
       if (i === 8) {
         outputString += `├─────────────────┤ `;
@@ -755,11 +752,13 @@ class Interpreter {
         outputString += `${memValue.toString(16).padStart(4, "0")}        │ `;
       }
       stackAddress++;
+      outputLines.push(outputString);
     }
 
-    outputString += "\n├──────────┬──────┴─┬─────┴──┬───┴────┬────────┤\n";
+    outputLines.push("├──────────┬──────┴─┬─────┴──┬───┴────┬────────┤");
 
     // Handle flags
+    let outputString = "";
     outputString += "│  Flags:  ";
     for (let flag of ["c", "v", "n", "z"]) {
       if (update.flags.old[flag] !== update.flags.new[flag]) {
@@ -768,8 +767,10 @@ class Interpreter {
         outputString += `│ ${flag}: ${update.flags.new[flag]}   `;
       }
     }
-    outputString += "│\n└──────────┴────────┴────────┴────────┴────────┘\n";
-    return outputString;
+    outputString += "|";
+    outputLines.push(outputString);
+    outputLines.push("└──────────┴────────┴────────┴────────┴────────┘");
+    return outputLines;
   }
 
   codeSnippetDisplay(update, colors, listing) {
@@ -860,8 +861,12 @@ class Interpreter {
       memoryRows
     );
 
-    let outputString =
-      registerStackOutput + codeSnippetOutput + memoryDisplayOutput;
+    let outputString = "";
+
+    for (let line in registerStackOutput)
+      outputString += `${registerStackOutput[line]}\n`;
+
+    outputString += codeSnippetOutput + memoryDisplayOutput;
 
     console.log(outputString);
     // Count how many newline characters are in the outputString
