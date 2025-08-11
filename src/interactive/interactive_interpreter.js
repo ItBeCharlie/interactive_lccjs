@@ -387,6 +387,7 @@ class Interpreter {
     let stepNumber = 1; // Number of steps to execute
     let lastStepNumber = stepNumber;
     let skipSteps = false;
+    let displayStyle = "t";
 
     if (this.options.interactiveMode) {
       this.initializeLog();
@@ -396,7 +397,8 @@ class Interpreter {
         update,
         memoryBaseAddress,
         memoryDisplayRows,
-        stackOptions
+        stackOptions,
+        displayStyle
       );
       let infoPrompt = "\nEnter number of steps to execute.\n";
       infoPrompt += "Positive to step forward, negative to step back, \n";
@@ -411,7 +413,7 @@ class Interpreter {
       infoPrompt += "view of the stack based on the register value.\n";
       infoPrompt += "(e.g., sr0, sr5, sfp)";
       console.log(infoPrompt);
-      newlineCount += 13;
+      newlineCount += (infoPrompt.match(/\n/g) || []).length + 1;
     }
     this.lineLength = 0;
 
@@ -432,6 +434,12 @@ class Interpreter {
               skipSteps = true;
             }
             break;
+          case "r":
+            output = this.handleRowsInput(input.inputLine.substring(1));
+            if (output.error == "") {
+              memoryDisplayRows = output.memoryDisplayRows;
+              skipSteps = true;
+            }
           case "s":
             output = this.handleStackInput(input.inputLine.substring(1));
             if (output.error == "") {
@@ -439,9 +447,13 @@ class Interpreter {
               skipSteps = true;
             }
             break;
-          case "h":
+          case "t":
           case "w":
-            this.handlePaneAdjustment(input.inputLine);
+            displayStyle = input.inputLine[0];
+            skipSteps = true;
+            output = { error: "" };
+            // this.handlePaneAdjustment(input.inputLine);
+            break;
           default:
             output = this.handleStepsInput(input.inputLine, lastStepNumber);
             if (output == "") {
@@ -468,7 +480,8 @@ class Interpreter {
           update,
           memoryBaseAddress,
           memoryDisplayRows,
-          stackOptions
+          stackOptions,
+          displayStyle
         );
       } else {
         // Normal LCC execution, handle 1 step at a time until termination
@@ -486,12 +499,22 @@ class Interpreter {
   }
 
   handleMemoryInput(inputLine) {
-    // If it does, extract the number after "m"
-
     let output = { error: "" };
 
     if (this.isHexNumber(inputLine)) {
       output.memoryBaseAddress = parseInt(inputLine, 16);
+    } else {
+      output.error = "Invalid input. Please enter a hex number.";
+    }
+
+    return output;
+  }
+
+  handleRowsInput(inputLine) {
+    let output = { error: "" };
+
+    if (this.isDecNumber(inputLine)) {
+      output.memoryDisplayRows = parseInt(inputLine, 10);
     } else {
       output.error = "Invalid input. Please enter a number.";
     }
@@ -543,14 +566,11 @@ class Interpreter {
           stackOptions.stackBaseAddress = parseInt(inputLine, 16);
           stackOptions.mode = "static";
         } else {
-          output.error = "Invalid input. Please enter a number or register.";
+          output.error =
+            "Invalid input. Please enter a hex number or register.";
         }
     }
     return output;
-  }
-
-  handlePaneAdjustment(inputLine) {
-    // TODO: Implement pane adjustment logic
   }
 
   handleStepsInput(inputLine, lastStepNumber) {
@@ -716,7 +736,7 @@ class Interpreter {
     let oldfp = update.registers.old[5];
     let oldsp = update.registers.old[6];
 
-    let outputLines = [""];
+    let outputLines = [];
 
     outputLines.push("┌─────────────────┬────────────────────────────┐");
     outputLines.push("│    Registers    │ Stack ─ Addr ─── Memory    │");
@@ -792,10 +812,10 @@ class Interpreter {
           .toString(16)
           .padStart(4, "0")}${colors.reset} > ${colors.new}${newMemValue
           .toString(16)
-          .padStart(4, "0")}${colors.reset} │ `;
+          .padStart(4, "0")}${colors.reset} │`;
       } else {
         let memValue = this.mem[stackAddress];
-        outputString += `${memValue.toString(16).padStart(4, "0")}        │ `;
+        outputString += `${memValue.toString(16).padStart(4, "0")}        │`;
       }
       stackAddress++;
       outputLines.push(outputString);
@@ -813,7 +833,7 @@ class Interpreter {
         outputString += `│ ${flag}: ${update.flags.new[flag]}   `;
       }
     }
-    outputString += "|";
+    outputString += "│";
     outputLines.push(outputString);
     outputLines.push("└──────────┴────────┴────────┴────────┴────────┘");
     return outputLines;
@@ -893,7 +913,8 @@ class Interpreter {
     update,
     baseMemAddress = 0,
     memoryRows = 10,
-    stackOptions
+    stackOptions,
+    displayStyle
   ) {
     let colors = {
       old: "\x1b[31m",
@@ -917,16 +938,33 @@ class Interpreter {
       memoryRows
     );
 
-    let outputString = "";
+    let outputString = "\n";
 
-    for (let line in registerStackOutput)
-      outputString += `${registerStackOutput[line]}\n`;
+    if (displayStyle == "t") {
+      for (let line in registerStackOutput)
+        outputString += `${registerStackOutput[line]}\n`;
 
-    for (let line in codeSnippetOutput)
-      outputString += `${codeSnippetOutput[line]}\n`;
+      for (let line in codeSnippetOutput)
+        outputString += `${codeSnippetOutput[line]}\n`;
 
-    for (let line in memoryDisplayOutput)
-      outputString += `${memoryDisplayOutput[line]}\n`;
+      for (let line in memoryDisplayOutput)
+        outputString += `${memoryDisplayOutput[line]}\n`;
+    } else if (displayStyle == "w") {
+      let combined = registerStackOutput.concat(codeSnippetOutput);
+      let size = Math.min(combined.length, memoryDisplayOutput.length);
+      for (let i = 0; i < size; i++) {
+        outputString += `${combined[i]}${memoryDisplayOutput[i]}\n`;
+      }
+      if (combined.length > memoryDisplayOutput.length) {
+        for (let i = size; i < combined.length; i++) {
+          outputString += `${combined[i]}\n`;
+        }
+      } else {
+        for (let i = size; i < memoryDisplayOutput.length; i++) {
+          outputString += `${" ".repeat(48)}${memoryDisplayOutput[i]}\n`;
+        }
+      }
+    }
 
     console.log(outputString);
     // Count how many newline characters are in the outputString
