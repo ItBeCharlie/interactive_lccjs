@@ -774,9 +774,11 @@ class Interpreter {
   }
 
   codeSnippetDisplay(update, colors, listing) {
-    let outputString = "┌───────────────┤ Code Snippet ├───────────────┐\n";
+    let outputLines = [];
+    outputLines.push("┌───────────────┤ Code Snippet ├───────────────┐");
     for (let i = -2; i <= 2; i++) {
       let lineNumber = update.pc.old + i - this.loadPoint;
+      let outputString = "";
       if (lineNumber < 0 || lineNumber > 0xffff) continue;
       if (lineNumber in listing) {
         let codeLine = listing[lineNumber].sourceLine
@@ -790,11 +792,12 @@ class Interpreter {
         } else {
           codeLine = `  ${codeLine}`.padEnd(44);
         }
-        outputString += `│ ${codeLine} │\n`;
+        outputString += `│ ${codeLine} │`;
+        outputLines.push(outputString);
       }
     }
-    outputString += "└──────────────────────────────────────────────┘\n";
-    return outputString;
+    outputLines.push("└──────────────────────────────────────────────┘");
+    return outputLines;
   }
 
   memoryDisplayDisplay(update, colors, baseMemAddress, memoryRows) {
@@ -866,7 +869,10 @@ class Interpreter {
     for (let line in registerStackOutput)
       outputString += `${registerStackOutput[line]}\n`;
 
-    outputString += codeSnippetOutput + memoryDisplayOutput;
+    for (let line in codeSnippetOutput)
+      outputString += `${codeSnippetOutput[line]}\n`;
+
+    outputString += memoryDisplayOutput;
 
     console.log(outputString);
     // Count how many newline characters are in the outputString
