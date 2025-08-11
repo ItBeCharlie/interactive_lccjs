@@ -720,8 +720,10 @@ class Interpreter {
     for (let i = 0; i < 8 * memoryRows; i++) {
       let addr = baseMemAddress + i;
       if (addr > 0xffff) {
-        let offset = (baseMemAddress % 8) * 5 + 1; // Calculate the offset for the next row
-        outputString += " ".repeat(offset) + "│\n";
+        if (baseMemAddress % 8 != 0) {
+          let offset = (baseMemAddress % 8) * 5 + 1; // Calculate the offset for the next row
+          outputString += " ".repeat(offset) + "│\n";
+        }
         break; // Stop if we exceed the maximum memory address
       }
       let value =
