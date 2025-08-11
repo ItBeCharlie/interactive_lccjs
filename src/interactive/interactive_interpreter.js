@@ -556,13 +556,22 @@ class Interpreter {
     }
 
     // Next, go through each address flagged and compare the old and new values to see if an update occured
+    console.log("ADDRESSES: ", addressSet);
     for (let address of addressSet) {
-      let oldValue = this.snapshot[oldIteration].memory[address];
-      let newValue = this.snapshot[newIteration].memory[address];
+      console.log(this.snapshot[newIteration].memory);
+
+      let baseAddress = this.snapshot[newIteration].memory.address;
+      let memoryIndex = address - baseAddress;
+      let oldValue = this.snapshot[newIteration].memory.old[memoryIndex];
+      let newValue = this.snapshot[newIteration].memory.new[memoryIndex];
+
       if (oldValue !== newValue) {
+        console.log("NEW VALUE");
         update.memory[address] = { old: oldValue, new: newValue };
       }
     }
+    console.log("UPDATE");
+    console.log(update);
 
     return update;
   }
@@ -583,10 +592,19 @@ class Interpreter {
       stackAddress = Math.max(relativeAddress - 8, 0);
     }
 
-    let fp = update.registers.new[5];
-    let sp = update.registers.new[6];
+    let newfp = update.registers.new[5];
+    let newsp = update.registers.new[6];
+    let oldfp = update.registers.old[5];
+    let oldsp = update.registers.old[6];
 
     let outputString = "";
+
+    let colors = {
+      old: "\x1b[31m",
+      new: "\x1b[32m",
+      reset: "\x1b[m",
+      hightlight: "\x1b[44m",
+    };
 
     if (this.terminalOutput) {
       outputString = "\n";
@@ -621,27 +639,47 @@ class Interpreter {
       }
 
       if (oldRegValue !== newRegValue) {
-        outputString += `│ ${registerName}: ${oldRegValue} > ${newRegValue} │ `;
+        outputString += `│ ${registerName}: ${colors.old}${oldRegValue}${colors.reset} > ${colors.new}${newRegValue}${colors.reset} │ `;
       } else {
         outputString += `│ ${registerName}: ${newRegValue}        │ `;
       }
 
-      if (fp == sp && fp == stackAddress) {
-        outputString += "fpsp> │ ";
-      } else if (fp == stackAddress) {
-        outputString += "  fp> │ ";
-      } else if (sp == stackAddress) {
-        outputString += "  sp> │ ";
+      if (newfp == stackAddress) {
+        outputString += `${colors.new}fp${colors.reset}`;
+      } else if (oldfp == stackAddress) {
+        outputString += `${colors.old}fp${colors.reset}`;
       } else {
-        outputString += "      │ ";
+        outputString += "  ";
       }
-      outputString += `${stackAddress.toString(16).padStart(4, "0")} │ `;
+
+      if (newsp == stackAddress) {
+        outputString += `${colors.new}sp${colors.reset}`;
+      } else if (oldsp == stackAddress) {
+        outputString += `${colors.old}sp${colors.reset}`;
+      } else {
+        outputString += "  ";
+      }
+
+      if (
+        newfp == stackAddress ||
+        oldfp == stackAddress ||
+        newsp == stackAddress ||
+        oldsp == stackAddress
+      ) {
+        outputString += ">";
+      } else {
+        outputString += " ";
+      }
+
+      outputString += ` │ ${stackAddress.toString(16).padStart(4, "0")} │ `;
       if (stackAddress in update.memory) {
         let oldMemValue = update.memory[stackAddress].old;
         let newMemValue = update.memory[stackAddress].new;
-        outputString += `${oldMemValue
+        outputString += `${colors.old}${oldMemValue
           .toString(16)
-          .padStart(4, "0")} > ${newMemValue.toString(16).padStart(4, "0")} │ `;
+          .padStart(4, "0")}${colors.reset} > ${colors.new}${newMemValue
+          .toString(16)
+          .padStart(4, "0")}${colors.reset} │ `;
       } else {
         let memValue = this.mem[stackAddress];
         outputString += `${memValue.toString(16).padStart(4, "0")}        │ `;
@@ -655,7 +693,7 @@ class Interpreter {
     outputString += "│  Flags:  ";
     for (let flag of ["c", "v", "n", "z"]) {
       if (update.flags.old[flag] !== update.flags.new[flag]) {
-        outputString += `│ ${flag}: ${update.flags.old[flag]}>${update.flags.new[flag]}`;
+        outputString += `│ ${flag}: ${colors.old}${update.flags.old[flag]}${colors.reset}>${colors.new}${update.flags.new[flag]}${colors.reset}`;
       } else {
         outputString += `│ ${flag}: ${update.flags.new[flag]}   `;
       }
@@ -665,7 +703,7 @@ class Interpreter {
     // Code snippet display
     outputString += "┌───────────────┤ Code Snippet ├───────────────┐\n";
     for (let i = -2; i <= 2; i++) {
-      let lineNumber = update.pc.new + i;
+      let lineNumber = update.pc.old + i;
       if (lineNumber < 0 || lineNumber > 0xffff) continue;
       if (lineNumber in listing) {
         let codeLine = listing[lineNumber].sourceLine
@@ -675,11 +713,13 @@ class Interpreter {
           codeLine = codeLine.slice(0, 39) + "...";
         }
         if (lineNumber === update.pc.new) {
-          codeLine = `> ${codeLine}`;
+          codeLine = ` ${colors.new}${codeLine}${colors.reset}`.padEnd(52);
+        } else if (lineNumber === update.pc.old) {
+          codeLine = ` ${colors.old}${codeLine}${colors.reset}`.padEnd(52);
         } else {
-          codeLine = `  ${codeLine}`;
+          codeLine = ` ${codeLine}`.padEnd(44);
         }
-        outputString += "│ " + codeLine.padEnd(44) + " │\n";
+        outputString += `│ ${codeLine} │\n`;
       }
     }
     outputString += "└──────────────────────────────────────────────┘\n";
@@ -1073,13 +1113,13 @@ class Interpreter {
     switch (this.eopcode) {
       case 0: // PUSH // mem[--sp] = sr
         // decrement stack pointer and store value
-        this.memoryChange.new = [this.r[this.sr]];
         this.memoryChange.hasChanged = true;
         this.r[6] = (this.r[6] - 1) & 0xffff;
         // save source register to memory at address pointed at by stack pointer
         this.memoryChange.address = this.r[6];
-        this.memoryChange.old = this.mem[this.r[6]];
+        this.memoryChange.old = [this.mem[this.r[6]]];
         this.mem[this.r[6]] = this.r[this.sr];
+        this.memoryChange.new = [this.mem[this.r[6]]];
         break;
       case 1: // POP // dr = mem[sp++];
         // load value from memory at address pointed at by stack pointer to destination
