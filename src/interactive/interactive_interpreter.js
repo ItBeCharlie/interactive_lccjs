@@ -731,7 +731,11 @@ class Interpreter {
       if (i % 8 === 0) {
         outputString += `│${addr.toString(16).padStart(4, "0")}│`;
       }
-      outputString += ` ${value}`;
+      if (addr in update.memory) {
+        outputString += ` ${colors.new}${value}${colors.reset}`;
+      } else {
+        outputString += ` ${value}`;
+      }
       if (i % 8 === 7) {
         outputString += " │\n";
       }
