@@ -378,6 +378,12 @@ class Interpreter {
     let newlineCount = 0;
     let memoryDisplayRows = 10; // Number of memory rows to display
     let memoryBaseAddress = this.loadPoint; // Base address for memory display
+    let stackOptions = {
+      mode: "relative",
+      stackBaseAddress: 0xfff2,
+      register: 5,
+    }; // Can be relative mode or static mode
+    // Register mode will follow a relative, static mode will stay fixed at a given address
     let stepNumber = 0; // Number of steps to execute
     let lastStepNumber = stepNumber;
 
@@ -388,29 +394,73 @@ class Interpreter {
         listing,
         update,
         memoryBaseAddress,
-        memoryDisplayRows
+        memoryDisplayRows,
+        stackOptions
       );
-      console.log(
-        "\nEnter number of steps to execute.\nPositive to step forward, negative to step back, \n0 to reprint current state.\nAdd 'm' to the end of a hex number to display memory \nfrom that address (e.g., 1m, 10m, ff0m):"
-      );
-      newlineCount += 6;
+      let infoPrompt = "\nEnter number of steps to execute.\n";
+      infoPrompt += "Positive to step forward, negative to step back, \n";
+      infoPrompt += "0 to reprint current state.\n";
+      infoPrompt += "Add 'm' to the beginning of a hex number to\n";
+      infoPrompt += "display memory from that address\n";
+      infoPrompt += "(e.g., m1, m100, mfff0)\n";
+      infoPrompt += "Add 's' to the beginning of a hex number to\n";
+      infoPrompt += "set the Stack view to start and stay at that location.\n";
+      infoPrompt += "(e.g., sfff0, s3000, s0)\n";
+      infoPrompt += "Or add a register add the 's' to have a relative\n";
+      infoPrompt += "view of the stack based on the register value.\n";
+      infoPrompt += "(e.g., sr0, sr5, sfp)";
+      console.log(infoPrompt);
+      newlineCount += 13;
     }
     this.lineLength = 0;
 
     while (this.running) {
       if (this.options.interactiveMode) {
         // console.log("\nCurrent iteration: ", this.currentIteration);
-        process.stdout.write("Steps: ");
+        process.stdout.write("Input: ");
         newlineCount++;
         lastStepNumber = stepNumber;
         let input = this.readLineFromStdin();
-        // I want to detect if the input line ends with "m"
-        if (input.inputLine.endsWith("m")) {
-          // If it does, extract the number before "m"
-          let match = input.inputLine.match(/([0-9a-fA-F]+)m$/);
+        // Set Memory Display base
+        if (input.inputLine.startsWith("m")) {
+          // If it does, extract the number after "m"
+          let match = input.inputLine.match(/m([0-9a-fA-F]+)$/);
           if (match) {
             memoryBaseAddress = parseInt(match[1], 16);
             stepNumber = 0; // No steps to execute, just display memory
+          } else {
+            console.error("Invalid input. Please enter a number.");
+            newlineCount++;
+            continue; // Skip to the next iteration of the loop
+          }
+          // Set Stack Display base
+        } else if (input.inputLine.startsWith("s")) {
+          stepNumber = 0; // No steps to execute, just display memory
+          let stackOption = input.inputLine.substring(1);
+          let match = stackOption.match(/([0-9a-fA-F]+)$/);
+          if (match) {
+            stackOptions.stackBaseAddress = parseInt(match[0], 16);
+            stackOptions.mode = "static";
+          } else {
+            match = stackOption.match(/(r[0-7]|fp|sp|lr)\b/g);
+            if (match) {
+              if (match[0].startsWith("r")) {
+                stackOptions.register = parseInt(match[0][1], 10);
+              } else if (match[0] == "fp") {
+                stackOptions.register = 5;
+              } else if (match[0] == "sp") {
+                stackOptions.register = 6;
+              } else if (match[0] == "lr") {
+                stackOptions.register = 7;
+              } else {
+                console.error(
+                  "Invalid input. Please enter a number or register."
+                );
+                newlineCount++;
+                continue; // Skip to the next iteration of the loop
+              }
+              stackOptions.mode = "relative";
+            }
           }
         } else if (input.inputLine == "") {
           stepNumber = lastStepNumber;
@@ -436,7 +486,8 @@ class Interpreter {
           listing,
           update,
           memoryBaseAddress,
-          memoryDisplayRows
+          memoryDisplayRows,
+          stackOptions
         );
       } else {
         // Normal LCC execution, handle 1 step at a time until termination
@@ -573,16 +624,29 @@ class Interpreter {
     return update;
   }
 
-  displayInteractiveMode(listing, update, baseMemAddress = 0, memoryRows = 10) {
-    // What register should the stack display relative to
-    let relativeAddress = update.registers.new[5];
-    // How many memory addresses should be displayed under the relative address
-    let displaySize = 4;
-
+  displayInteractiveMode(
+    listing,
+    update,
+    baseMemAddress = 0,
+    memoryRows = 10,
+    stackOptions
+  ) {
     let stackAddress = 0xfff2;
-    if (relativeAddress < 0xffff - displaySize && relativeAddress != 0) {
-      stackAddress = Math.max(relativeAddress - 8, 0);
+    switch (stackOptions.mode) {
+      case "relative":
+        let relativeAddress = update.registers.new[stackOptions.register];
+        let displaySize = 4;
+        if (relativeAddress < 0xffff - displaySize && relativeAddress != 0) {
+          stackAddress = Math.max(relativeAddress - 9, 0);
+        }
+
+        break;
+      case "static":
+        stackAddress = stackOptions.stackBaseAddress;
+        break;
     }
+
+    stackAddress = Math.max(0, Math.min(0xfff2, stackAddress));
 
     let newfp = update.registers.new[5];
     let newsp = update.registers.new[6];
