@@ -271,6 +271,9 @@ class Interpreter {
 
   // extracts header entries and loads machine code into memory
   loadExecutableBuffer(buffer) {
+    if (this.options.loadPoint != null) {
+      this.loadPoint = this.options.loadPoint;
+    }
     let offset = 0;
 
     // Read file signature
@@ -368,30 +371,34 @@ class Interpreter {
     this.snapshot.push(logEntry);
   }
 
-  run(listing, interactiveMode = false) {
+  run(listing) {
     this.spInitial = this.r[6]; // Assuming r6 is the stack pointer
 
     let update;
     let newlineCount = 0;
     let memoryDisplayRows = 10; // Number of memory rows to display
-    let memoryBaseAddress = 0; // Base address for memory display
+    let memoryBaseAddress = this.loadPoint; // Base address for memory display
     let stepNumber = 0; // Number of steps to execute
     let lastStepNumber = stepNumber;
 
-    if (interactiveMode) {
+    if (this.options.interactiveMode) {
       this.initializeLog();
       update = this.stateUpdates(0, 0);
-      newlineCount = this.displayInteractiveMode(listing, update);
+      newlineCount = this.displayInteractiveMode(
+        listing,
+        update,
+        memoryBaseAddress,
+        memoryDisplayRows
+      );
+      console.log(
+        "\nEnter number of steps to execute.\nPositive to step forward, negative to step back, \n0 to reprint current state.\nAdd 'm' to the end of a hex number to display memory \nfrom that address (e.g., 1m, 10m, ff0m):"
+      );
+      newlineCount += 6;
     }
     this.lineLength = 0;
 
-    console.log(
-      "\nEnter number of steps to execute.\nPositive to step forward, negative to step back, \n0 to reprint current state.\nAdd 'm' to the end of a hex number to display memory \nfrom that address (e.g., 1m, 10m, ff0m):"
-    );
-    newlineCount += 6;
-
     while (this.running) {
-      if (interactiveMode) {
+      if (this.options.interactiveMode) {
         // console.log("\nCurrent iteration: ", this.currentIteration);
         process.stdout.write("Steps: ");
         newlineCount++;
@@ -692,7 +699,7 @@ class Interpreter {
     // Code snippet display
     outputString += "┌───────────────┤ Code Snippet ├───────────────┐\n";
     for (let i = -2; i <= 2; i++) {
-      let lineNumber = update.pc.old + i;
+      let lineNumber = update.pc.old + i - this.loadPoint;
       if (lineNumber < 0 || lineNumber > 0xffff) continue;
       if (lineNumber in listing) {
         let codeLine = listing[lineNumber].sourceLine
@@ -701,9 +708,9 @@ class Interpreter {
         if (codeLine.length > 42) {
           codeLine = codeLine.slice(0, 39) + "...";
         }
-        if (lineNumber === update.pc.new) {
+        if (lineNumber === update.pc.new - this.loadPoint) {
           codeLine = `  ${colors.new}${codeLine}${colors.reset}`.padEnd(52);
-        } else if (lineNumber === update.pc.old) {
+        } else if (lineNumber === update.pc.old - this.loadPoint) {
           codeLine = `> ${colors.old}${codeLine}${colors.reset}`.padEnd(52);
         } else {
           codeLine = `  ${codeLine}`.padEnd(44);
