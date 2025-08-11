@@ -801,15 +801,20 @@ class Interpreter {
   }
 
   memoryDisplayDisplay(update, colors, baseMemAddress, memoryRows) {
-    let outputString = "┌────┬─────────┤ Memory Display ├──────────────┐\n";
-    outputString +=
-      "│\x1b[4mAddr│  +0   +1   +2   +3   +4   +5   +6   +7  \x1b[0m│\n";
+    let outputLines = [];
+    outputLines.push("┌────┬─────────┤ Memory Display ├──────────────┐");
+    outputLines.push(
+      "│\x1b[4mAddr│  +0   +1   +2   +3   +4   +5   +6   +7  \x1b[0m│"
+    );
+    let outputString = "";
+
     for (let i = 0; i < 8 * memoryRows; i++) {
       let addr = baseMemAddress + i;
       if (addr > 0xffff) {
         if (baseMemAddress % 8 != 0) {
           let offset = (baseMemAddress % 8) * 5 + 1; // Calculate the offset for the next row
-          outputString += " ".repeat(offset) + "│\n";
+          outputString += " ".repeat(offset) + "│";
+          outputLines.append(outputString);
         }
         break; // Stop if we exceed the maximum memory address
       }
@@ -828,11 +833,13 @@ class Interpreter {
         outputString += ` ${value}`;
       }
       if (i % 8 === 7) {
-        outputString += " │\n";
+        outputString += " │";
+        outputLines.push(outputString);
+        outputString = "";
       }
     }
-    outputString += "└────┴─────────────────────────────────────────┘";
-    return outputString;
+    outputLines.push("└────┴─────────────────────────────────────────┘");
+    return outputLines;
   }
 
   displayInteractiveMode(
@@ -872,7 +879,8 @@ class Interpreter {
     for (let line in codeSnippetOutput)
       outputString += `${codeSnippetOutput[line]}\n`;
 
-    outputString += memoryDisplayOutput;
+    for (let line in memoryDisplayOutput)
+      outputString += `${memoryDisplayOutput[line]}\n`;
 
     console.log(outputString);
     // Count how many newline characters are in the outputString
