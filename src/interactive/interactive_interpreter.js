@@ -460,7 +460,7 @@ class Interpreter {
             break;
           default:
             output = this.handleStepsInput(input.inputLine, lastStepNumber);
-            if (output == "") {
+            if (output.error == "") {
               stepNumber = output.stepNumber;
             }
         }
