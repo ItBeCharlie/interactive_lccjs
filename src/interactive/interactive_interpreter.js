@@ -384,7 +384,7 @@ class Interpreter {
       register: 5,
     }; // Can be relative mode or static mode
     // Register mode will follow a relative, static mode will stay fixed at a given address
-    let stepNumber = 0; // Number of steps to execute
+    let stepNumber = 1; // Number of steps to execute
     let lastStepNumber = stepNumber;
 
     if (this.options.interactiveMode) {
@@ -647,13 +647,7 @@ class Interpreter {
     return update;
   }
 
-  displayInteractiveMode(
-    listing,
-    update,
-    baseMemAddress = 0,
-    memoryRows = 10,
-    stackOptions
-  ) {
+  registerStackDisplay(update, colors, stackOptions) {
     let stackAddress = 0xfff2;
     switch (stackOptions.mode) {
       case "relative":
@@ -677,13 +671,6 @@ class Interpreter {
     let oldsp = update.registers.old[6];
 
     let outputString = "";
-
-    let colors = {
-      old: "\x1b[31m",
-      new: "\x1b[32m",
-      reset: "\x1b[m",
-      hightlight: "\x1b[44m",
-    };
 
     if (this.terminalOutput) {
       outputString = "\n";
@@ -782,9 +769,11 @@ class Interpreter {
       }
     }
     outputString += "│\n└──────────┴────────┴────────┴────────┴────────┘\n";
+    return outputString;
+  }
 
-    // Code snippet display
-    outputString += "┌───────────────┤ Code Snippet ├───────────────┐\n";
+  codeSnippetDisplay(update, colors, listing) {
+    let outputString = "┌───────────────┤ Code Snippet ├───────────────┐\n";
     for (let i = -2; i <= 2; i++) {
       let lineNumber = update.pc.old + i - this.loadPoint;
       if (lineNumber < 0 || lineNumber > 0xffff) continue;
@@ -804,9 +793,11 @@ class Interpreter {
       }
     }
     outputString += "└──────────────────────────────────────────────┘\n";
+    return outputString;
+  }
 
-    // Memory display
-    outputString += "┌────┬─────────┤ Memory Display ├──────────────┐\n";
+  memoryDisplayDisplay(update, colors, baseMemAddress, memoryRows) {
+    let outputString = "┌────┬─────────┤ Memory Display ├──────────────┐\n";
     outputString +=
       "│\x1b[4mAddr│  +0   +1   +2   +3   +4   +5   +6   +7  \x1b[0m│\n";
     for (let i = 0; i < 8 * memoryRows; i++) {
@@ -837,6 +828,41 @@ class Interpreter {
       }
     }
     outputString += "└────┴─────────────────────────────────────────┘";
+    return outputString;
+  }
+
+  displayInteractiveMode(
+    listing,
+    update,
+    baseMemAddress = 0,
+    memoryRows = 10,
+    stackOptions
+  ) {
+    let colors = {
+      old: "\x1b[31m",
+      new: "\x1b[32m",
+      reset: "\x1b[m",
+      hightlight: "\x1b[44m",
+    };
+
+    let registerStackOutput = this.registerStackDisplay(
+      update,
+      colors,
+      stackOptions
+    );
+
+    let codeSnippetOutput = this.codeSnippetDisplay(update, colors, listing);
+
+    let memoryDisplayOutput = this.memoryDisplayDisplay(
+      update,
+      colors,
+      baseMemAddress,
+      memoryRows
+    );
+
+    let outputString =
+      registerStackOutput + codeSnippetOutput + memoryDisplayOutput;
+
     console.log(outputString);
     // Count how many newline characters are in the outputString
     const newlineCount = (outputString.match(/\n/g) || []).length;
