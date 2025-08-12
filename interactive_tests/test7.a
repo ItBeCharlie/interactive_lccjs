@@ -1,9 +1,9 @@
 ; Charles DeGennaro                                
 								; // c0402.c
                                 ; #include <stdio.h>
-				.start startup
-startup:        bl main
-				halt						
+			.start startup
+startup:    bl main
+			halt						
 
 @S0:		.string "in g"		
                                 ; void g()

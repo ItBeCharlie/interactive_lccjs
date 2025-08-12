@@ -9,6 +9,7 @@
             dout r1
             dout r2
             dout r3
+            nl
             dout r4
             dout r5
             dout r6
