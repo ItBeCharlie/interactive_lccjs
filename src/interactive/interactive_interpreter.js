@@ -387,33 +387,21 @@ class Interpreter {
     let stepNumber = 1; // Number of steps to execute
     let lastStepNumber = stepNumber;
     let skipSteps = false;
+    let skipDisplay = false;
     let displayStyle = "t";
 
     if (this.options.interactiveMode) {
       this.initializeLog();
       update = this.stateUpdates(0, 0);
-      newlineCount = this.displayInteractiveMode(
-        listing,
-        update,
-        memoryBaseAddress,
-        memoryDisplayRows,
-        stackOptions,
-        displayStyle
-      );
-      let infoPrompt = "\nEnter number of steps to execute.\n";
-      infoPrompt += "Positive to step forward, negative to step back, \n";
-      infoPrompt += "0 to reprint current state.\n";
-      infoPrompt += "Add 'm' to the beginning of a hex number to\n";
-      infoPrompt += "display memory from that address\n";
-      infoPrompt += "(e.g., m1, m100, mfff0)\n";
-      infoPrompt += "Add 's' to the beginning of a hex number to\n";
-      infoPrompt += "set the Stack view to start and stay at that location.\n";
-      infoPrompt += "(e.g., sfff0, s3000, s0)\n";
-      infoPrompt += "Or add a register add the 's' to have a relative\n";
-      infoPrompt += "view of the stack based on the register value.\n";
-      infoPrompt += "(e.g., sr0, sr5, sfp)";
-      console.log(infoPrompt);
-      newlineCount += (infoPrompt.match(/\n/g) || []).length + 1;
+      // newlineCount = this.displayInteractiveMode(
+      //   listing,
+      //   update,
+      //   memoryBaseAddress,
+      //   memoryDisplayRows,
+      //   stackOptions,
+      //   displayStyle
+      // );
+      newlineCount = this.displayHelpMenu();
     }
     this.lineLength = 0;
 
@@ -423,36 +411,44 @@ class Interpreter {
         newlineCount++;
         lastStepNumber = stepNumber;
         skipSteps = false;
+        skipDisplay = false;
         let input = this.readLineFromStdin();
         let output;
 
         switch (input.inputLine[0]) {
-          case "m":
+          case "h": // Print the help menu
+            this.clearLines(newlineCount);
+            newlineCount = this.displayHelpMenu();
+            skipSteps = true;
+            skipDisplay = true;
+            output = { error: "" };
+            break;
+          case "m": // Set Memory Display address
             output = this.handleMemoryInput(input.inputLine.substring(1));
             if (output.error == "") {
               memoryBaseAddress = output.memoryBaseAddress;
               skipSteps = true;
             }
             break;
-          case "r":
+          case "r": // Set Memory Display Rows
             output = this.handleRowsInput(input.inputLine.substring(1));
             if (output.error == "") {
               memoryDisplayRows = output.memoryDisplayRows;
               skipSteps = true;
             }
-          case "s":
+          case "s": // Set stack mode
             output = this.handleStackInput(input.inputLine.substring(1));
             if (output.error == "") {
               stackOptions = output.stackOptions;
               skipSteps = true;
             }
             break;
-          case "q":
+          case "q": // Quit
             this.running = false;
             output = { error: "" };
             break;
-          case "t":
-          case "w":
+          case "t": // Set window to Tall mode
+          case "w": // Set window to Wide mode
             displayStyle = input.inputLine[0];
             skipSteps = true;
             output = { error: "" };
@@ -471,7 +467,7 @@ class Interpreter {
           continue;
         }
 
-        this.clearLines(newlineCount);
+        if (!skipDisplay) this.clearLines(newlineCount);
 
         let originalIteration = this.currentIteration;
         if (!skipSteps) this.handleSteps(stepNumber);
@@ -479,14 +475,15 @@ class Interpreter {
 
         update = this.stateUpdates(originalIteration, newIteration);
 
-        newlineCount = this.displayInteractiveMode(
-          listing,
-          update,
-          memoryBaseAddress,
-          memoryDisplayRows,
-          stackOptions,
-          displayStyle
-        );
+        if (!skipDisplay)
+          newlineCount = this.displayInteractiveMode(
+            listing,
+            update,
+            memoryBaseAddress,
+            memoryDisplayRows,
+            stackOptions,
+            displayStyle
+          );
       } else {
         // Normal LCC execution, handle 1 step at a time until termination
         this.handleSteps(1);
@@ -500,6 +497,41 @@ class Interpreter {
 
   isDecNumber(input) {
     return /-?\d+/.test(input);
+  }
+
+  displayHelpMenu() {
+    let infoPrompt = "\nCommands:\n";
+    infoPrompt += "h: Help\n";
+    infoPrompt += " - Displays this help menu. Do not add {} in commands.\n";
+    infoPrompt += "m{hex}: Memory Display Address Selector\n";
+    infoPrompt += " - Memory Display module will start at address {hex}\n";
+    infoPrompt += " - (e.g., m1, m100, mfff0)\n";
+    infoPrompt += "r{int}: Memory Display Rows Selector\n";
+    infoPrompt += " - Memory Display module will show {int} rows\n";
+    infoPrompt += " - 0 will turn off module\n";
+    infoPrompt += " - (e.g. r10, r20, r0)\n";
+    infoPrompt += "s{hex}: Stack Controller Static Mode\n";
+    infoPrompt += " - Add a hex number after 's' to set Stack view to\n";
+    infoPrompt += " - start and stay at that address.\n";
+    infoPrompt += "(e.g., sfff0, s3000, s0)\n";
+    infoPrompt += "s{register}: Stack Controller Follow Mode\n";
+    infoPrompt += " - Will set the Stack view to follow memory\n";
+    infoPrompt += " - centered around address in {register}\n";
+    infoPrompt += "(e.g., sr0, sr5, sfp)";
+    infoPrompt += "t: Enter Tall Mode (default)\n";
+    infoPrompt += " - Places the Memory Display module below everything\n";
+    infoPrompt += "w: Enter Wide Mode\n";
+    infoPrompt += " - Places the Memory Display module to the right\n";
+    infoPrompt += "q: Quit \n";
+    infoPrompt += " - Terminates the program in it's current state\n";
+    infoPrompt += "{int}: Step Selector\n";
+    infoPrompt += " - Enter a positive or negative number of steps\n";
+    infoPrompt += " - for the program to step through. The last\n";
+    infoPrompt += " - entered step value is remembered\n";
+    infoPrompt += " - 0 will reprint the current state\n";
+    console.log(infoPrompt);
+    let newlineCount = (infoPrompt.match(/\n/g) || []).length + 1;
+    return newlineCount;
   }
 
   handleMemoryInput(inputLine) {
