@@ -4,8 +4,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const Assembler = require("./interactive_assembler");
-const Interpreter = require("./interactive_interpreter");
+const Assembler = require("./iassembler");
+const Interpreter = require("./iinterpreter");
 const nameHandler = require("../utils/name.js");
 const { generateBSTLSTContent } = require("../utils/genStats.js");
 
