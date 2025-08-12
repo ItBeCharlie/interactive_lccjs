@@ -436,6 +436,7 @@ class Interpreter {
               memoryDisplayRows = output.memoryDisplayRows;
               skipSteps = true;
             }
+            break;
           case "s": // Set stack mode
             output = this.handleStackInput(input.inputLine.substring(1));
             if (output.error == "") {
@@ -513,11 +514,11 @@ class Interpreter {
     infoPrompt += "s{hex}: Stack Controller Static Mode\n";
     infoPrompt += " - Add a hex number after 's' to set Stack view to\n";
     infoPrompt += " - start and stay at that address.\n";
-    infoPrompt += "(e.g., sfff0, s3000, s0)\n";
+    infoPrompt += " - (e.g., sfff0, s3000, s0)\n";
     infoPrompt += "s{register}: Stack Controller Follow Mode\n";
     infoPrompt += " - Will set the Stack view to follow memory\n";
     infoPrompt += " - centered around address in {register}\n";
-    infoPrompt += "(e.g., sr0, sr5, sfp)";
+    infoPrompt += " - (e.g., sr0, sr5, sfp)\n";
     infoPrompt += "t: Enter Tall Mode (default)\n";
     infoPrompt += " - Places the Memory Display module below everything\n";
     infoPrompt += "w: Enter Wide Mode\n";
@@ -550,7 +551,7 @@ class Interpreter {
     let output = { error: "" };
 
     if (this.isDecNumber(inputLine)) {
-      output.memoryDisplayRows = parseInt(inputLine, 10);
+      output.memoryDisplayRows = Math.max(0, parseInt(inputLine, 10));
     } else {
       output.error = "Invalid input. Please enter a number.";
     }
@@ -967,12 +968,15 @@ class Interpreter {
 
     let codeSnippetOutput = this.codeSnippetDisplay(update, colors, listing);
 
-    let memoryDisplayOutput = this.memoryDisplayDisplay(
-      update,
-      colors,
-      baseMemAddress,
-      memoryRows
-    );
+    let memoryDisplayOutput = [];
+    if (memoryRows != 0) {
+      memoryDisplayOutput = this.memoryDisplayDisplay(
+        update,
+        colors,
+        baseMemAddress,
+        memoryRows
+      );
+    }
 
     let outputString = "\n";
 
