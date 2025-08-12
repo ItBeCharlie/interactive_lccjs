@@ -623,9 +623,14 @@ class Interpreter {
   }
 
   clearLines(linesToClear) {
-    // Move cursor to end of last output and clear all lines to end of screen
-    process.stdout.write(`\x1b[${linesToClear}A\x1b[${this.lineLength + 1}C`);
-    process.stdout.write("\x1b[0J");
+    // Move cursor up however many lines we wrote in this iteration
+    process.stdout.write(`\x1b[${linesToClear}A`);
+    if (this.lineLength > 0) {
+      // If there was already output on this line, move cursor past current output
+      process.stdout.write(`\x1b[${this.lineLength}C`);
+    }
+    // Clear from cursor to bottom of screen
+    process.stdout.write(`\x1b[0J`);
   }
 
   handleSteps(stepNumber) {
