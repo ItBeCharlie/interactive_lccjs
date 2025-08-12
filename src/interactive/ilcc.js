@@ -99,12 +99,13 @@ class LCC {
   printHelp() {
     console.log("Usage: lcc.js <infile>");
     console.log(
-      "Optional args: -d -m -i -r -t -f -x -l<hex loadpt> -o <outfile> -h"
+      "Optional args: -d -m -i -c -r -t -f -x -l<hex loadpt> -o <outfile> -h"
     );
     console.log(
       "   -d:   debug, -m mem display at end, -r: reg display at end"
     );
     console.log("   -i:   Enter interactive lcc mode");
+    console.log("   -c:   Enable colorblind mode for ilcc");
     console.log("   -f:   full line display, -x: 4 digit hout, -h: help");
     console.log(
       "What lcc.js does depends on the extension in the input file name:"
@@ -137,6 +138,9 @@ class LCC {
         switch (arg) {
           case "-i":
             this.options.interactiveMode = true;
+            break;
+          case "-c":
+            this.options.colorblindMode = true;
             break;
           case "-d":
             this.options.debug = true;

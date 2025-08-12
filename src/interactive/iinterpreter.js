@@ -389,6 +389,12 @@ class Interpreter {
     let skipSteps = false;
     let skipDisplay = false;
     let displayStyle = "t";
+    let colors = {
+      old: "\x1b[91m",
+      new: "\x1b[92m",
+      reset: "\x1b[m",
+      hightlight: "\x1b[44m",
+    };
 
     if (this.options.interactiveMode) {
       this.initializeLog();
@@ -402,6 +408,10 @@ class Interpreter {
       //   displayStyle
       // );
       newlineCount = this.displayHelpMenu();
+      if (this.options.colorblindMode) {
+        colors.old = "\x1b[93m";
+        colors.new = "\x1b[94m";
+      }
     }
     this.lineLength = 0;
 
@@ -483,7 +493,8 @@ class Interpreter {
             memoryBaseAddress,
             memoryDisplayRows,
             stackOptions,
-            displayStyle
+            displayStyle,
+            colors
           );
       } else {
         // Normal LCC execution, handle 1 step at a time until termination
@@ -956,15 +967,9 @@ class Interpreter {
     baseMemAddress = 0,
     memoryRows = 10,
     stackOptions,
-    displayStyle
+    displayStyle,
+    colors
   ) {
-    let colors = {
-      old: "\x1b[31m",
-      new: "\x1b[32m",
-      reset: "\x1b[m",
-      hightlight: "\x1b[44m",
-    };
-
     let registerStackOutput = this.registerStackDisplay(
       update,
       colors,
