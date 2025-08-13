@@ -393,7 +393,7 @@ class Interpreter {
       old: "\x1b[91m",
       new: "\x1b[92m",
       reset: "\x1b[m",
-      hightlight: "\x1b[44m",
+      highlight: "\x1b[46m",
     };
 
     if (this.options.interactiveMode) {
@@ -501,6 +501,7 @@ class Interpreter {
         this.handleSteps(1);
       }
     }
+    console.log();
   }
 
   isHexNumber(input) {
@@ -881,7 +882,7 @@ class Interpreter {
     outputString += "│  Flags:  ";
     for (let flag of ["c", "v", "n", "z"]) {
       if (update.flags.old[flag] !== update.flags.new[flag]) {
-        outputString += `│ ${flag}: ${colors.old}${update.flags.old[flag]}${colors.reset}>${colors.new}${update.flags.new[flag]}${colors.reset}`;
+        outputString += `│ ${flag}: ${colors.old}${update.flags.old[flag]}${colors.reset}>${colors.new}${update.flags.new[flag]}${colors.reset} `;
       } else {
         outputString += `│ ${flag}: ${update.flags.new[flag]}   `;
       }
@@ -945,7 +946,7 @@ class Interpreter {
         outputString += `│${addr.toString(16).padStart(4, "0")}│`;
       }
       if (addr == update.pc.old) {
-        outputString += ` ${colors.old}${value}${colors.reset}`;
+        outputString += ` ${colors.highlight}${value}${colors.reset}`;
       } else if (addr in update.memory) {
         outputString += ` ${colors.new}${value}${colors.reset}`;
       } else {
