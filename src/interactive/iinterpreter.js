@@ -393,7 +393,7 @@ class Interpreter {
       old: "\x1b[91m",
       new: "\x1b[92m",
       reset: "\x1b[m",
-      highlight: "\x1b[46m",
+      highlight: "\x1b[100m",
     };
 
     if (this.options.interactiveMode) {
