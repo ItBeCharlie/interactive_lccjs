@@ -1,0 +1,109 @@
+LCC.js Assemble/Link/Interpret/Debug Ver 0.1  Thu, Aug 14, 2025, 13:51:02
+DeGennaro, Charles L
+
+Header
+o
+S 0000
+C
+
+Loc   Code
+                    ; Charles DeGennaro                                
+                    								; // c0402.c
+                                                    ; #include <stdio.h>
+                    			.start startup
+0000  4834       startup:    bl main
+0001  f000       			halt						
+                    
+0002  0069       @S0:		.string "in g"		
+0003  006e      
+0004  0020      
+0005  0067      
+0006  0000      
+                                                    ; void g()
+                                                    ; {
+0007  ae00       g:      	push lr
+0008  aa00       			push fp
+0009  ab8c       			mov fp, sp
+                                                       	; printf("in g\n");
+000a  e1f7       			lea r0, @S0
+000b  f006       			sout r0
+000c  f001       			nl
+                                                    ; }
+000d  ad4c       			mov sp, fp
+000e  aa01       			pop fp
+000f  ae01       			pop lr
+0010  c1c0       			ret
+                    
+0011  0075       @S1:		.string "up"
+0012  0070      
+0013  0000      
+0014  0064       @S2:		.string "down"
+0015  006f      
+0016  0077      
+0017  006e      
+0018  0000      
+                                                    ; void f(void)
+                                                    ; {
+0019  ae00       f:      	push lr
+001a  aa00       			push fp
+001b  ab8c       			mov fp, sp
+                    									; printf("up\n");
+001c  e1f4       			lea r0, @S1
+001d  f006       			sout r0
+001e  f001       			nl
+                    									; g();
+001f  4fe7       			bl g
+                    									; printf("down\n");
+0020  e1f3       			lea r0, @S2
+0021  f006       			sout r0
+0022  f001       			nl
+                                                    ; }
+0023  ad4c       			mov sp, fp
+0024  aa01       			pop fp
+0025  ae01       			pop lr
+0026  c1c0       			ret
+                    
+0027  0068       @S3:		.string "hello"
+0028  0065      
+0029  006c      
+002a  006c      
+002b  006f      
+002c  0000      
+002d  0067       @S4:		.string "goodbye"
+002e  006f      
+002f  006f      
+0030  0064      
+0031  0062      
+0032  0079      
+0033  0065      
+0034  0000      
+                                                    ; int main()
+                                                    ; {
+0035  ae00       main:       push lr
+0036  aa00       			push fp
+0037  ab8c       			mov fp, sp
+                    									; printf("hello\n");
+0038  e1ee       			lea r0, @S3
+0039  f006       			sout r0
+003a  f001       			nl
+                    									; f();
+003b  4fdd       			bl f
+                    									; printf("goodbye\n");
+003c  e1f0       			lea r0, @S4
+003d  f006       			sout r0
+003e  f001       			nl
+                    									; return 0;
+003f  d000       			mov r0, 0
+                                                    ; }								
+0040  ad4c       			mov sp, fp
+0041  aa01       			pop fp
+0042  ae01       			pop lr
+0043  c1c0       			ret
+====================================================== Output
+
+========================================== Program statistics
+Input file name          =   interactive_tests/test7.a
+Instructions executed    =   3 (hex)    3 (dec)
+Program size             =   44 (hex)    68 (dec)
+Max stack size           =   2 (hex)    2 (dec)
+Load point               =   0 (hex)    0 (dec)
