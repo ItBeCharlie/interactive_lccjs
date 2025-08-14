@@ -400,9 +400,9 @@ class Interpreter {
 		// Register mode will follow a relative, static mode will stay fixed at a given address
 		let stepNumber = 1; // Number of steps to execute
 		let lastStepNumber = stepNumber;
-		let skipSteps = true;
+		let skipSteps = false;
 		let skipDisplay = false;
-		let displayStyle = "t";
+		let paneLayout = { column0: "rcm", column1: "", column2: "" };
 		let codeLines = 5;
 		let colors = {
 			old: "\x1b[91m",
@@ -424,7 +424,8 @@ class Interpreter {
 			//   stackOptions,
 			//   displayStyle
 			// );
-			newlineCount = this.displayHelpMenu();
+			console.log("\nTo view all commands, enter 'h'\n");
+			newlineCount = 3;
 			if (this.options.colorblindMode) {
 				colors.old = "\x1b[93m";
 				colors.new = "\x1b[94m";
@@ -437,6 +438,7 @@ class Interpreter {
 				process.stdout.write("Input: ");
 				newlineCount++;
 				lastStepNumber = stepNumber;
+				skipSteps = false;
 				skipDisplay = false;
 				let input = this.readLineFromStdin();
 				let output;
@@ -449,7 +451,7 @@ class Interpreter {
 						skipDisplay = true;
 						output = { error: "" };
 						break;
-					case "m": // Set Memory Display address
+					case "a": // Set Memory Display address
 						output = this.handleMemoryInput(
 							input.inputLine.substring(1)
 						);
@@ -458,7 +460,7 @@ class Interpreter {
 							skipSteps = true;
 						}
 						break;
-					case "r": // Set Memory Display Rows
+					case "m": // Set Memory Display Rows
 						output = this.handleRowsInput(
 							input.inputLine.substring(1)
 						);
@@ -485,6 +487,16 @@ class Interpreter {
 							skipSteps = true;
 						}
 						break;
+					case "l": // Set pane layout
+						output = this.handlePaneLayout(
+							input.inputLine.substring(1)
+						);
+						if (output.error == "") {
+							paneLayout = output.paneLayout;
+							skipSteps = true;
+						}
+						break;
+
 					case "q": // Quit
 						this.running = false;
 						output = { error: "" };
@@ -527,12 +539,10 @@ class Interpreter {
 						memoryBaseAddress,
 						memoryDisplayRows,
 						stackOptions,
-						displayStyle,
+						paneLayout,
 						codeLines,
 						colors
 					);
-
-				skipSteps = false;
 			} else {
 				// Normal LCC execution, handle 1 step at a time until termination
 				this.handleSteps(1);
@@ -555,10 +565,10 @@ class Interpreter {
 		infoPrompt +=
 			" - Displays this help menu. Do not add {} in commands.\n\n";
 		infoPrompt +=
-			"m{hex}: Memory Display Address Selector (default loadPoint)\n";
+			"a{hex}: Memory Display Address Selector (default loadPoint)\n";
 		infoPrompt += " - Memory Display module will start at address {hex}\n";
 		infoPrompt += " - (e.g., m1, m100, mfff0)\n\n";
-		infoPrompt += "r{int}: Memory Display Rows Selector (default 10)\n";
+		infoPrompt += "m{int}: Memory Display Rows Selector (default 10)\n";
 		infoPrompt += " - Memory Display module will show {int} rows\n";
 		infoPrompt += " - 0 will turn off module\n";
 		infoPrompt += " - (e.g. r10, r20, r0)\n\n";
@@ -575,11 +585,13 @@ class Interpreter {
 		infoPrompt += " - Will set the Stack view to follow memory\n";
 		infoPrompt += " - centered around address in {register}\n";
 		infoPrompt += " - (e.g., sr0, sr5, sfp)\n\n";
-		infoPrompt += "t: Enter Tall Mode (default)\n";
-		infoPrompt +=
-			" - Places the Memory Display module below everything\n\n";
-		infoPrompt += "w: Enter Wide Mode\n";
-		infoPrompt += " - Places the Memory Display module to the right\n\n";
+		infoPrompt += "l{'r,c,m,/'} Layout Editor (default rcm) \n";
+		infoPrompt += " - Will change the layout of the information panes\n";
+		infoPrompt += " - with up to 3 columns of panes.\n";
+		infoPrompt += " - Enter panes from top down, with '/' to move to\n";
+		infoPrompt += " - next column. 'r' for Register pane,\n";
+		infoPrompt += " - 'c' for Code Snippet, and 'm' for Memory Display\n";
+		infoPrompt += " - (e.g., lrm/c, lr/c/m, lcm,r)\n\n";
 		infoPrompt += "q: Quit \n";
 		infoPrompt += " - Terminates the program in it's current state\n\n";
 		infoPrompt += "{int}: Step Selector (default 1)\n";
@@ -676,6 +688,31 @@ class Interpreter {
 		} else {
 			output.error = "Invalid input. Please enter a number.";
 		}
+		return output;
+	}
+
+	handlePaneLayout(inputLine) {
+		let output = {
+			error: "",
+			paneLayout: { column0: "", column1: "", column2: "" },
+		};
+		let lineSplit = inputLine.split("/");
+		for (let i = 0; i < lineSplit.length; i++) {
+			for (let j = 0; j < lineSplit[i].length; j++) {
+				let char = lineSplit[i][j];
+				switch (char) {
+					case "r":
+					case "c":
+					case "m":
+						output.paneLayout[`column${i}`] += char;
+						break;
+					default:
+						output.error = `${char} is not a valid pane identifier. Only 'r', 'c', and 'm' are.`;
+						return output;
+				}
+			}
+		}
+
 		return output;
 	}
 
@@ -1066,7 +1103,7 @@ class Interpreter {
 		baseMemAddress = 0,
 		memoryRows = 10,
 		stackOptions,
-		displayStyle,
+		paneLayout,
 		codeLines,
 		colors
 	) {
@@ -1099,33 +1136,72 @@ class Interpreter {
 
 		let outputString = "\n";
 
-		if (displayStyle == "t") {
-			for (let line in registerStackOutput)
-				outputString += `${registerStackOutput[line]}\n`;
+		let columns = [[], [], []];
 
-			for (let line in codeSnippetOutput)
-				outputString += `${codeSnippetOutput[line]}\n`;
-
-			for (let line in memoryDisplayOutput)
-				outputString += `${memoryDisplayOutput[line]}\n`;
-		} else if (displayStyle == "w") {
-			let combined = registerStackOutput.concat(codeSnippetOutput);
-			let size = Math.min(combined.length, memoryDisplayOutput.length);
-			for (let i = 0; i < size; i++) {
-				outputString += `${combined[i]}${memoryDisplayOutput[i]}\n`;
-			}
-			if (combined.length > memoryDisplayOutput.length) {
-				for (let i = size; i < combined.length; i++) {
-					outputString += `${combined[i]}\n`;
+		for (let i = 0; i < 3; i++) {
+			let tokens = paneLayout[`column${i}`];
+			for (let char of tokens) {
+				let element = [];
+				switch (char) {
+					case "r":
+						element = registerStackOutput;
+						break;
+					case "c":
+						element = codeSnippetOutput;
+						break;
+					case "m":
+						element = memoryDisplayOutput;
+						break;
+					default:
+						[];
 				}
-			} else {
-				for (let i = size; i < memoryDisplayOutput.length; i++) {
-					outputString += `${" ".repeat(48)}${
-						memoryDisplayOutput[i]
-					}\n`;
-				}
+				columns[i].push(...element);
 			}
 		}
+		let blank = " ".repeat(48);
+		let size = Math.max(
+			columns[0].length,
+			columns[1].length,
+			columns[2].length
+		);
+		for (let i = 0; i < size; i++) {
+			for (let j = 0; j < 3; j++) {
+				if (columns[j].length > i) {
+					outputString += columns[j][i];
+				} else if (columns[j] != 0) {
+					outputString += blank;
+				}
+			}
+			outputString += "\n";
+		}
+
+		// exit()
+
+		// if (displayStyle == "t") {
+		// 	for (let line in registerStackOutput)
+		// 		outputString += `${registerStackOutput[line]}\n`;
+
+		// 	for (let line in codeSnippetOutput)
+		// 		outputString += `${codeSnippetOutput[line]}\n`;
+
+		// 	for (let line in memoryDisplayOutput)
+		// 		outputString += `${memoryDisplayOutput[line]}\n`;
+		// } else if (displayStyle == "w") {
+		// 	let combined = registerStackOutput.concat(codeSnippetOutput);
+		// 	let size = Math.min(combined.length, memoryDisplayOutput.length);
+		// 	for (let i = 0; i < size; i++) {
+		// 		outputString += `${combined[i]}${memoryDisplayOutput[i]}\n`;
+		// 	}
+		// 	if (combined.length > memoryDisplayOutput.length) {
+		// 		for (let i = size; i < combined.length; i++) {
+		// 			outputString += `${combined[i]}\n`;
+		// 		}
+		// 	} else {
+		// 		for (let i = size; i < memoryDisplayOutput.length; i++) {
+		// 			outputString += `${blank}${memoryDisplayOutput[i]}\n`;
+		// 		}
+		// 	}
+		// }
 
 		console.log(outputString);
 		// Count how many newline characters are in the outputString
