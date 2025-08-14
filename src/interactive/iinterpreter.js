@@ -416,16 +416,18 @@ class Interpreter {
 		if (this.options.interactiveMode) {
 			this.initializeLog();
 			update = this.stateUpdates(0, 0);
-			// newlineCount = this.displayInteractiveMode(
-			//   listing,
-			//   update,
-			//   memoryBaseAddress,
-			//   memoryDisplayRows,
-			//   stackOptions,
-			//   displayStyle
-			// );
+			newlineCount = this.displayInteractiveMode(
+				cleanListing,
+				update,
+				memoryBaseAddress,
+				memoryDisplayRows,
+				stackOptions,
+				paneLayout,
+				codeLines,
+				colors
+			);
 			console.log("\nTo view all commands, enter 'h'\n");
-			newlineCount = 3;
+			newlineCount += 3;
 			if (this.options.colorblindMode) {
 				colors.old = "\x1b[93m";
 				colors.new = "\x1b[94m";
@@ -500,13 +502,6 @@ class Interpreter {
 					case "q": // Quit
 						this.running = false;
 						output = { error: "" };
-						break;
-					case "t": // Set window to Tall mode
-					case "w": // Set window to Wide mode
-						displayStyle = input.inputLine[0];
-						skipSteps = true;
-						output = { error: "" };
-						// this.handlePaneAdjustment(input.inputLine);
 						break;
 					default:
 						output = this.handleStepsInput(
