@@ -400,15 +400,18 @@ class Interpreter {
 		// Register mode will follow a relative, static mode will stay fixed at a given address
 		let stepNumber = 1; // Number of steps to execute
 		let lastStepNumber = stepNumber;
-		let skipSteps = false;
+		let skipSteps = true;
 		let skipDisplay = false;
 		let displayStyle = "t";
+		let codeLines = 5;
 		let colors = {
 			old: "\x1b[91m",
 			new: "\x1b[92m",
 			reset: "\x1b[m",
 			highlight: "\x1b[100m",
 		};
+
+		let cleanListing = this.locationLineMap(listing);
 
 		if (this.options.interactiveMode) {
 			this.initializeLog();
@@ -434,7 +437,6 @@ class Interpreter {
 				process.stdout.write("Input: ");
 				newlineCount++;
 				lastStepNumber = stepNumber;
-				skipSteps = false;
 				skipDisplay = false;
 				let input = this.readLineFromStdin();
 				let output;
@@ -471,6 +473,15 @@ class Interpreter {
 						);
 						if (output.error == "") {
 							stackOptions = output.stackOptions;
+							skipSteps = true;
+						}
+						break;
+					case "c": // Set code window lines
+						output = this.handleCodeWindowLines(
+							input.inputLine.substring(1)
+						);
+						if (output.error == "") {
+							codeLines = output.codeLines;
 							skipSteps = true;
 						}
 						break;
@@ -511,14 +522,17 @@ class Interpreter {
 
 				if (!skipDisplay)
 					newlineCount = this.displayInteractiveMode(
-						listing,
+						cleanListing,
 						update,
 						memoryBaseAddress,
 						memoryDisplayRows,
 						stackOptions,
 						displayStyle,
+						codeLines,
 						colors
 					);
+
+				skipSteps = false;
 			} else {
 				// Normal LCC execution, handle 1 step at a time until termination
 				this.handleSteps(1);
@@ -548,6 +562,10 @@ class Interpreter {
 		infoPrompt += " - Memory Display module will show {int} rows\n";
 		infoPrompt += " - 0 will turn off module\n";
 		infoPrompt += " - (e.g. r10, r20, r0)\n\n";
+		infoPrompt += "c{int}: Code Snippet Rows Selector (default 5)\n";
+		infoPrompt += " - Code Snippet module will show {int} rows\n";
+		infoPrompt += " - 0 will turn off module\n";
+		infoPrompt += " - (e.g. c10, c20, c0)\n\n";
 		infoPrompt += "s{hex}: Stack Controller Static Mode\n";
 		infoPrompt += " - Add a hex number after 's' to set Stack view to\n";
 		infoPrompt += " - start and stay at that address.\n";
@@ -645,6 +663,18 @@ class Interpreter {
 					output.error =
 						"Invalid input. Please enter a hex number or register.";
 				}
+		}
+		return output;
+	}
+
+	handleCodeWindowLines(inputLine) {
+		let output = { error: "" };
+		if (inputLine == "") {
+			output.codeLines = 0;
+		} else if (this.isDecNumber(inputLine)) {
+			output.codeLines = Math.max(0, parseInt(inputLine, 10));
+		} else {
+			output.error = "Invalid input. Please enter a number.";
 		}
 		return output;
 	}
@@ -794,6 +824,17 @@ class Interpreter {
 		return update;
 	}
 
+	locationLineMap(listing) {
+		let keys = {};
+		let lines = [];
+		for (const key of Object.keys(listing)) {
+			let line = listing[key].sourceLine;
+			keys[listing[key].locCtr] = lines.length;
+			lines.push(line);
+		}
+		return { keys: keys, lines: lines };
+	}
+
 	registerStackDisplay(update, colors, stackOptions) {
 		let stackAddress = 0xfff2;
 		switch (stackOptions.mode) {
@@ -936,28 +977,42 @@ class Interpreter {
 		return outputLines;
 	}
 
-	codeSnippetDisplay(update, colors, listing) {
+	codeSnippetDisplay(update, colors, listing, codeLines) {
 		let outputLines = [];
+		let mainLineKey = update.pc.old - this.loadPoint;
+		let mainLineIndex = listing.keys[mainLineKey];
+
+		let codeLinesMin = -Math.floor(codeLines / 2) + mainLineIndex;
+		let codeLinesMax =
+			Math.floor(codeLines / 2) + (codeLines % 2) + mainLineIndex;
+
+		if (codeLinesMin < 0) {
+			codeLinesMax += -codeLinesMin;
+			codeLinesMin = 0;
+		} else if (codeLinesMax > listing.lines.length) {
+			codeLinesMin -= codeLinesMax - listing.lines.length;
+			codeLinesMax = listing.lines.length;
+		}
+
+		codeLinesMin = Math.max(codeLinesMin, 0);
+		codeLinesMax = Math.min(codeLinesMax, listing.lines.length);
+
 		outputLines.push("┌───────────────┤ Code Snippet ├───────────────┐");
-		for (let i = -2; i <= 2; i++) {
-			let lineNumber = update.pc.old + i - this.loadPoint;
+
+		for (let i = codeLinesMin; i < codeLinesMax; i++) {
 			let outputString = "";
-			if (lineNumber < 0 || lineNumber > 0xffff) continue;
-			if (lineNumber in listing) {
-				let codeLine = listing[lineNumber].sourceLine
-					.replace(/\t/g, "    ")
-					.trimEnd();
-				if (codeLine.length > 42) {
-					codeLine = codeLine.slice(0, 39) + "...";
-				}
-				if (lineNumber === update.pc.old - this.loadPoint) {
-					codeLine = `> ${codeLine}`.padEnd(44);
-				} else {
-					codeLine = `  ${codeLine}`.padEnd(44);
-				}
-				outputString += `│ ${codeLine} │`;
-				outputLines.push(outputString);
+
+			let codeLine = listing.lines[i].replace(/\t/g, "    ").trimEnd();
+			if (codeLine.length > 42) {
+				codeLine = codeLine.slice(0, 39) + "...";
 			}
+			if (i === mainLineIndex) {
+				codeLine = `> ${codeLine}`.padEnd(44);
+			} else {
+				codeLine = `  ${codeLine}`.padEnd(44);
+			}
+			outputString += `│ ${codeLine} │`;
+			outputLines.push(outputString);
 		}
 		outputLines.push("└──────────────────────────────────────────────┘");
 		return outputLines;
@@ -1006,25 +1061,31 @@ class Interpreter {
 	}
 
 	displayInteractiveMode(
-		listing,
+		cleanListing,
 		update,
 		baseMemAddress = 0,
 		memoryRows = 10,
 		stackOptions,
 		displayStyle,
+		codeLines,
 		colors
 	) {
-		let registerStackOutput = this.registerStackDisplay(
+		let registerStackOutput = [];
+		registerStackOutput = this.registerStackDisplay(
 			update,
 			colors,
 			stackOptions
 		);
 
-		let codeSnippetOutput = this.codeSnippetDisplay(
-			update,
-			colors,
-			listing
-		);
+		let codeSnippetOutput = [];
+		if (codeLines != 0) {
+			codeSnippetOutput = this.codeSnippetDisplay(
+				update,
+				colors,
+				cleanListing,
+				codeLines
+			);
+		}
 
 		let memoryDisplayOutput = [];
 		if (memoryRows != 0) {
