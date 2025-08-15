@@ -403,6 +403,7 @@ class Interpreter {
 		let skipSteps = false;
 		let skipDisplay = false;
 		let paneLayout = { column0: "rcm", column1: "", column2: "" };
+		let columnCount = 1;
 		let codeLines = 5;
 		let colors = {
 			old: "\x1b[91m",
@@ -495,6 +496,7 @@ class Interpreter {
 						);
 						if (output.error == "") {
 							paneLayout = output.paneLayout;
+							columnCount = output.columnCount;
 							skipSteps = true;
 						}
 						break;
@@ -538,12 +540,19 @@ class Interpreter {
 						codeLines,
 						colors
 					);
+
+				let spaces = "=".repeat((48 * columnCount) / 2 - 4);
+				process.stdout.write(`${spaces}`);
+				process.stdout.write(` Output `);
+				process.stdout.write(`${spaces}\n`);
+
+				console.log(this.output);
+				newlineCount += (this.output.match(/\n/g) || []).length + 2;
 			} else {
 				// Normal LCC execution, handle 1 step at a time until termination
 				this.handleSteps(1);
 			}
 		}
-		console.log();
 	}
 
 	isHexNumber(input) {
@@ -690,8 +699,11 @@ class Interpreter {
 		let output = {
 			error: "",
 			paneLayout: { column0: "", column1: "", column2: "" },
+			columnCount: 1,
 		};
 		let lineSplit = inputLine.split("/");
+		output.columnCount = lineSplit.length;
+
 		for (let i = 0; i < lineSplit.length; i++) {
 			for (let j = 0; j < lineSplit[i].length; j++) {
 				let char = lineSplit[i][j];
@@ -726,10 +738,10 @@ class Interpreter {
 	clearLines(linesToClear) {
 		// Move cursor up however many lines we wrote in this iteration
 		process.stdout.write(`\x1b[${linesToClear}A`);
-		if (this.lineLength > 0) {
-			// If there was already output on this line, move cursor past current output
-			process.stdout.write(`\x1b[${this.lineLength}C`);
-		}
+		// if (this.lineLength > 0) {
+		// 	// If there was already output on this line, move cursor past current output
+		// 	process.stdout.write(`\x1b[${this.lineLength}C`);
+		// }
 		// Clear from cursor to bottom of screen
 		process.stdout.write(`\x1b[0J`);
 	}
@@ -1786,7 +1798,6 @@ class Interpreter {
 			charCode = this.mem[address];
 			this.lineLength += 1;
 		}
-		this.terminalOutput = true;
 	}
 
 	readLineFromStdin() {
@@ -1992,7 +2003,9 @@ class Interpreter {
 	// be followed by a newline, as in the case of
 	// aout, dout, sout, etc.
 	writeOutput(message) {
-		process.stdout.write(message);
+		if (!this.options.interactiveMode) {
+			process.stdout.write(message);
+		}
 		this.output += message;
 	}
 
@@ -2002,11 +2015,14 @@ class Interpreter {
 	// without a newline.
 	writeDebugOutputOrElse(message) {
 		if (this.debugMode) {
-			process.stdout.write(message + "\n");
+			if (!this.interactiveMode) {
+				process.stdout.write(message + "\n");
+			}
 		} else {
-			process.stdout.write(message);
+			if (!this.options.interactiveMode) {
+				process.stdout.write(message);
+			}
 		}
-		this.terminalOutput = true;
 		this.lineLength += message.length;
 		this.output += message;
 	}
@@ -2019,6 +2035,7 @@ class Interpreter {
 			case 1: // NL
 				this.lineLength = 0;
 				this.writeOutput(newline);
+				this.newlinePrinted = true;
 				break;
 			case 2: // DOUT
 				let value = this.r[this.sr];
