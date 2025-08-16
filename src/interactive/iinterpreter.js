@@ -862,6 +862,10 @@ class Interpreter {
       reset: "\x1b[39m",
     };
 
+    if (listing.macWord != null) {
+      return listing.sourceLine.replace(/[\r\n]/g, "");
+    }
+
     if (listing.label != null) {
       outputString += `${listing.label}:`;
     }
