@@ -395,7 +395,7 @@ class Interpreter {
       old: "\x1b[91m",
       new: "\x1b[92m",
       reset: "\x1b[m",
-      highlight: "\x1b[100m",
+      highlight: "\x1b[48;5;240m",
     };
 
     let cleanListing = this.locationLineMap(listing);
@@ -533,7 +533,7 @@ class Interpreter {
   }
 
   isDecNumber(input) {
-    return /-?\d+/.test(input);
+    return /^-?\d+$/.test(input);
   }
 
   displayHelpMenu() {
@@ -845,11 +845,58 @@ class Interpreter {
     let keys = {};
     let lines = [];
     for (const key of Object.keys(listing)) {
-      let line = listing[key].sourceLine;
+      let line = listing[key];
       keys[listing[key].locCtr] = lines.length;
       lines.push(line);
     }
     return { keys: keys, lines: lines };
+  }
+
+  codeSnippetSyntaxHighlight(listing) {
+    let outputString = "";
+    let colors = {
+      green: "\x1b[92m",
+      purple: "\x1b[38;5;141m",
+      red: "\x1b[91m",
+      yellow: "\x1b[38;5;228m",
+      reset: "\x1b[39m",
+    };
+
+    if (listing.label != null) {
+      outputString += `${listing.label}`;
+    }
+
+    outputString = outputString.padEnd(12);
+
+    outputString += `${colors.green}${listing.mnemonic}${colors.reset} `;
+
+    for (let operand of listing.operands) {
+      if (/(r[0-7]|fp|sp|lr)\b/.test(operand)) {
+        outputString += `${colors.red}${operand}${colors.reset}`;
+      } else if (
+        this.isDecNumber(operand) ||
+        /^0x[0-9a-fA-F]+$/.test(operand) ||
+        /'[^"]*'/.test(operand)
+      ) {
+        outputString += `${colors.purple}${operand}${colors.reset}`;
+      } else if (/"[^"]*"/.test(operand)) {
+        outputString += `${colors.yellow}${operand}${colors.reset}`;
+      } else {
+        outputString += `${operand}`;
+      }
+      outputString += ", ";
+    }
+
+    if (listing.operands.length > 0) {
+      outputString = outputString.slice(0, outputString.length - 2);
+    }
+
+    return outputString;
+  }
+
+  getVisibleLength(str) {
+    // Utility function to get the visible length of a string (excluding ANSI codes)
+    return str.replace(/\x1b\[[0-9;]*m/g, "").length;
   }
 
   registerStackDisplay(update, colors, stackOptions) {
@@ -1003,16 +1050,19 @@ class Interpreter {
     for (let i = codeLinesMin; i < codeLinesMax; i++) {
       let outputString = "";
 
-      let codeLine = listing.lines[i].replace(/\t/g, "    ").trimEnd();
-      if (codeLine.length > 42) {
-        codeLine = codeLine.slice(0, 39) + "...";
-      }
+      let codeLine = this.codeSnippetSyntaxHighlight(listing.lines[i]);
+
+      // Remove ANSI codes for length calculation
+      const visibleLength = this.getVisibleLength(codeLine);
+      let prefix = i === mainLineIndex ? "> " : "  ";
+      let padded = codeLine + " ".repeat(42 - visibleLength);
+
+      // Now add the prefix and wrap in the box
       if (i === mainLineIndex) {
-        codeLine = `> ${codeLine}`.padEnd(44);
+        outputString += `│ \x1b[48;5;236m${prefix}${padded}${colors.reset} │`;
       } else {
-        codeLine = `  ${codeLine}`.padEnd(44);
+        outputString += `│ ${prefix}${padded} │`;
       }
-      outputString += `│ ${codeLine} │`;
       outputLines.push(outputString);
     }
     outputLines.push("└──────────────────────────────────────────────┘");
