@@ -395,7 +395,7 @@ class Interpreter {
       old: "\x1b[91m",
       new: "\x1b[92m",
       reset: "\x1b[m",
-      highlight: "\x1b[48;5;240m",
+      highlight: "\x1b[48;5;238m",
     };
 
     let cleanListing = this.locationLineMap(listing);
