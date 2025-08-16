@@ -863,7 +863,7 @@ class Interpreter {
     };
 
     if (listing.label != null) {
-      outputString += `${listing.label}`;
+      outputString += `${listing.label}:`;
     }
 
     outputString = outputString.padEnd(12);
