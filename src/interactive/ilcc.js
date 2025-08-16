@@ -104,7 +104,7 @@ class LCC {
     console.log(
       "   -d:   debug, -m mem display at end, -r: reg display at end"
     );
-    console.log("   -i:   Enter interactive lcc mode");
+    console.log("   -n:   Disable interactive lcc mode");
     console.log("   -c:   Enable colorblind mode for ilcc");
     console.log("   -f:   full line display, -x: 4 digit hout, -h: help");
     console.log(
@@ -131,13 +131,14 @@ class LCC {
 
   parseArguments(args) {
     let i = 0;
+    this.options.interactiveMode = true;
     while (i < args.length) {
       let arg = args[i];
       if (arg.startsWith("-")) {
         // Option
         switch (arg) {
-          case "-i":
-            this.options.interactiveMode = true;
+          case "-n":
+            this.options.interactiveMode = false;
             break;
           case "-c":
             this.options.colorblindMode = true;
