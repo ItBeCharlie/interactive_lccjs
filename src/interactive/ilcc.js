@@ -99,7 +99,7 @@ class LCC {
   printHelp() {
     console.log("Usage: lcc.js <infile>");
     console.log(
-      "Optional args: -d -m -n -i<dec number> -c -r -t -f -x -l<hex loadpt> -o <outfile> -h"
+      "Optional args: -d -m -n -i<dec number> -e -c -r -t -f -x -l<hex loadpt> -o <outfile> -h"
     );
     console.log(
       "   -d:   debug, -m mem display at end, -r: reg display at end"
@@ -107,6 +107,9 @@ class LCC {
     console.log("   -n:   Disable interactive lcc mode");
     console.log(
       "   -i:   Change the instruction cap before automatic halt (default 50000)"
+    );
+    console.log(
+      "   -e:   Enable efficient mode (disables logging to go backwards, saves memory)"
     );
     console.log("   -c:   Enable colorblind mode for ilcc");
     console.log("   -f:   full line display, -x: 4 digit hout, -h: help");
@@ -135,6 +138,8 @@ class LCC {
   parseArguments(args) {
     let i = 0;
     this.options.interactiveMode = true;
+    this.options.colorblindMode = false;
+    this.options.efficicentMode = false;
     while (i < args.length) {
       let arg = args[i];
       if (arg.startsWith("-")) {
@@ -145,6 +150,9 @@ class LCC {
             break;
           case "-c":
             this.options.colorblindMode = true;
+            break;
+          case "-e":
+            this.options.efficicentMode = true;
             break;
           case "-d":
             this.options.debug = true;

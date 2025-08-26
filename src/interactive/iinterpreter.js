@@ -406,6 +406,7 @@ class Interpreter {
 
     if (this.options.interactiveMode) {
       this.initializeLog();
+
       update = this.stateUpdates(0, 0);
       newlineCount = this.displayInteractiveMode(
         cleanListing,
@@ -504,7 +505,11 @@ class Interpreter {
         if (!skipSteps) this.handleSteps(stepNumber);
         let newIteration = this.currentIteration;
 
-        update = this.stateUpdates(originalIteration, newIteration);
+        if (!this.options.efficicentMode) {
+          update = this.stateUpdates(originalIteration, newIteration);
+        } else {
+          update = this.stateUpdates(0, 1);
+        }
 
         if (!skipDisplay)
           newlineCount = this.displayInteractiveMode(
@@ -706,6 +711,9 @@ class Interpreter {
       output.stepNumber = lastStepNumber;
     } else if (this.isDecNumber(inputLine)) {
       output.stepNumber = parseInt(inputLine, 10);
+      if (this.options.efficicentMode && output.stepNumber < 0) {
+        output.error = "Cannot go backwards in efficicent mode.";
+      }
     } else {
       output.error = "Invalid input. Please enter a number.";
     }
@@ -1333,10 +1341,19 @@ class Interpreter {
     };
 
     // Only update the change log if this is a new execution
-    if (readInNewInput) {
-      this.snapshot.push(logEntry);
+    if (!this.options.efficicentMode) {
+      if (readInNewInput) {
+        this.snapshot.push(logEntry);
+      } else {
+        this.snapshot[this.currentIteration] = logEntry;
+      }
     } else {
-      this.snapshot[this.currentIteration] = logEntry;
+      if (this.snapshot.length < 2) {
+        this.snapshot.push(logEntry);
+      } else {
+        this.snapshot[0] = this.snapshot[1];
+        this.snapshot[1] = logEntry;
+      }
     }
     // if any registers changed or flags were set, print them out
     if (this.debugMode && this.running) {
