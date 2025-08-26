@@ -400,6 +400,10 @@ class Interpreter {
 
     let cleanListing = this.locationLineMap(listing);
 
+    if (this.options.instructionCap != null) {
+      this.instructionsCap = Math.max(1, this.options.instructionCap);
+    }
+
     if (this.options.interactiveMode) {
       this.initializeLog();
       update = this.stateUpdates(0, 0);
