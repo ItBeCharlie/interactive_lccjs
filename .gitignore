@@ -22,3 +22,6 @@ test/*.bin
 scratch/
 plusdemos/*.ep
 cit118demos/
+dist/
+ilcc*
+interactive_tests
