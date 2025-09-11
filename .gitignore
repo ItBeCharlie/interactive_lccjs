@@ -25,3 +25,4 @@ cit118demos/
 dist/
 ilcc*
 interactive_tests
+.DS_Store
