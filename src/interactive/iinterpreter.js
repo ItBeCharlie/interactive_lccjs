@@ -412,10 +412,15 @@ class Interpreter {
 			highlight: "\x1b[48;5;238m",
 		};
 
-		let cleanListing = this.locationLineMap(listing);
+    let cleanListing = this.locationLineMap(listing);
+
+    if (this.options.instructionCap != null) {
+      this.instructionsCap = Math.max(1, this.options.instructionCap);
+    }
 
 		if (this.options.interactiveMode) {
 			this.initializeLog();
+
 			update = this.stateUpdates(0, 0);
 			newlineCount = this.displayInteractiveMode(
 				cleanListing,
@@ -523,10 +528,15 @@ class Interpreter {
 
 				if (!skipDisplay) this.clearLines(newlineCount);
 
-				let originalIteration = this.currentIteration;
-				if (!skipSteps) this.handleSteps(stepNumber);
-				let newIteration = this.currentIteration;
-				update = this.stateUpdates(originalIteration, newIteration);
+        let originalIteration = this.currentIteration;
+        if (!skipSteps) this.handleSteps(stepNumber);
+        let newIteration = this.currentIteration;
+
+        if (!this.options.efficicentMode) {
+          update = this.stateUpdates(originalIteration, newIteration);
+        } else {
+          update = this.stateUpdates(0, 1);
+        }
 
 				if (!skipDisplay)
 					newlineCount = this.displayInteractiveMode(
@@ -724,17 +734,20 @@ class Interpreter {
 		return output;
 	}
 
-	handleStepsInput(inputLine, lastStepNumber) {
-		let output = { error: "" };
-		if (inputLine == "") {
-			output.stepNumber = lastStepNumber;
-		} else if (this.isDecNumber(inputLine)) {
-			output.stepNumber = parseInt(inputLine, 10);
-		} else {
-			output.error = "Invalid input. Please enter a number.";
-		}
-		return output;
-	}
+  handleStepsInput(inputLine, lastStepNumber) {
+    let output = { error: "" };
+    if (inputLine == "") {
+      output.stepNumber = lastStepNumber;
+    } else if (this.isDecNumber(inputLine)) {
+      output.stepNumber = parseInt(inputLine, 10);
+      if (this.options.efficicentMode && output.stepNumber < 0) {
+        output.error = "Cannot go backwards in efficicent mode.";
+      }
+    } else {
+      output.error = "Invalid input. Please enter a number.";
+    }
+    return output;
+  }
 
 	clearLines(linesToClear) {
 		// Move cursor up however many lines we wrote in this iteration
@@ -1376,15 +1389,24 @@ class Interpreter {
 			memory: this.memoryChange,
 		};
 
-		// Only update the change log if this is a new execution
-		if (readInNewInput) {
-			this.snapshot.push(logEntry);
-		} else {
-			this.snapshot[this.currentIteration] = logEntry;
-		}
-		// if any registers changed or flags were set, print them out
-		if (this.debugMode && this.running) {
-			let regsOrFlagsOutput = "";
+    // Only update the change log if this is a new execution
+    if (!this.options.efficicentMode) {
+      if (readInNewInput) {
+        this.snapshot.push(logEntry);
+      } else {
+        this.snapshot[this.currentIteration] = logEntry;
+      }
+    } else {
+      if (this.snapshot.length < 2) {
+        this.snapshot.push(logEntry);
+      } else {
+        this.snapshot[0] = this.snapshot[1];
+        this.snapshot[1] = logEntry;
+      }
+    }
+    // if any registers changed or flags were set, print them out
+    if (this.debugMode && this.running) {
+      let regsOrFlagsOutput = "";
 
 			for (let i = 0; i < 8; i++) {
 				const oldVal = prevRegs[i];
