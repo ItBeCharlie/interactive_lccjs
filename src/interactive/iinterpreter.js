@@ -768,22 +768,34 @@ class Interpreter {
 		// Check if new instructions are to be executed
 		if (stepNumber > 0) {
 			// When true, new inputs from user should be read, otherwise, restore the input
+			// will continuously iterate over states until it reaches the desired state and
+			// show those results to the user
 			for (let i = 0; i < Math.abs(stepNumber) && this.running; i++) {
 				this.currentIteration++;
+				// If we have already executed this instruction in the past, restore the state 
+				// from the snapshot log instead of re-executing the instruction
+				// Boolean checks if we should accept new inputs, which is only true
+				// if we are executing a state for the first time
 				this.executeNextInstruction(
 					this.currentIteration == this.snapshot.length
 				);
 			}
 		} else {
-			// New State should not be less than 0
-			let newState = Math.max(this.currentIteration + stepNumber, 0);
-			this.restorePrevState(newState);
-			this.currentIteration = newState;
+			// Determine what iteration number to go back to, and restore the state from the snapshot log
+			// We can only go back as far as the beginning of the log (iteration 0)
+			let newStateIteration = Math.max(this.currentIteration + stepNumber, 0);
+			this.restorePrevState(newStateIteration);
+			this.currentIteration = newStateIteration;
 		}
 	}
 
 	restorePrevState(newState) {
 		let log = this.snapshot[newState];
+
+		// Remember that the two main components of the LCC is the CPU and Main Memory
+
+		// Restoring the CPU side of things from a new state is straight forward,
+		// since we have all the relevant information stored in the log
 
 		// Restore old pc
 		this.pc = log.pc;
@@ -797,8 +809,14 @@ class Interpreter {
 		// Restore old register values
 		for (let i = 0; i < 8; i++) this.r[i] = log.registers[i];
 
+		// Restoring memory is a more complicated process, since we don't store the entire memory state 
+		// at each iteration in the log, but rather just the changes that were made to memory at each iteration. 
+		// So to restore memory, we have to iterate backwards through the log from the current iteration to the 
+		// new iteration and undo any changes that were made to memory along the way.
+
 		// Undo any changes to memory
 		for (let i = this.currentIteration; i >= newState; i--) {
+			// Only handle a memory change if there was one at this iteration, otherwise we can skip to the next iteration
 			if (this.snapshot[i].memory.hasChanged) {
 				this.restorePrevMemory(i);
 			}
@@ -810,18 +828,60 @@ class Interpreter {
 		// console.log("MEMORY: ", this.snapshot[state].memory);
 
 		let oldMem = this.snapshot[state].memory;
+		// Determine that there is a base address for the memory change, 
+		// and that there are old values to restore, otherwise skip
+		// Note: I don't think the address should ever be null based on how memory changes are logged
 		if (oldMem.address != null) {
+			// Load the old memory array into oldValues for easier access
 			let oldValues = oldMem.old;
 			for (let i = 0; i < oldValues.length; i++) {
+				// Iterate through memory and restore old values at the appropriate addresses,
+				// note the use of adding oldMem.address to i to get the correct memory address to restore at
 				this.mem[oldMem.address + i] = oldValues[i];
 			}
 		}
 	}
 
 	stateUpdates(oldIteration, newIteration) {
+		// Ensure the iteration numbers are not negative
 		oldIteration = Math.max(oldIteration, 0);
 		newIteration = Math.max(newIteration, 0);
 		// console.log("State Updates: ", oldIteration, newIteration);
+
+		// Determines what changes actually occured between two iterations
+
+		/*
+The update object has the following structure:
+update = {
+  	registers: {
+		old: [...], // Array of old register values
+		new: [...]  // Array of new register values
+	},	
+  	
+	pc: {
+		old: ..., // Old program counter value
+		new: ...  // New program counter value
+		},
+	
+	ir: {
+			old: ..., // Old instruction register value
+			new: ...  // New instruction register value
+		}
+	},
+	
+	flags: {
+			old: { c: ..., v: ..., n: ..., z: ... }, // Old flag values
+			new: { c: ..., v: ..., n: ..., z: ... }  // New flag values
+	},	
+
+	memory: {
+		address: {
+			old: ..., // Old value at this memory address
+			new: ...  // New value at this memory address
+		}
+	}
+}
+*/
 
 		let update = {
 			registers: {
@@ -844,14 +904,29 @@ class Interpreter {
 		};
 
 		// Track all memory changes between two iterations
+
+		// There are different processes for going forwards and backwards between iterations, 
+		// since going forwards means we want to see the new changes that were made, 
+		// while going backwards means we want to undo changes and see the old values 
+		// that were there before the changes were made. 
+		// 
+		// So when going forwards, we iterate forward through the log and look at the new values of memory changes, 
+		// but when going backwards, we iterate backwards through the log and look at the old values of memory changes.
+
 		let changes = {};
+		// 
 		if (oldIteration < newIteration) {
 			for (let i = newIteration; i > oldIteration; i--) {
 				let memoryChange = this.snapshot[i].memory;
+				// If memory didn't change, no need to check for changes at this iteration, move on to the next one
 				if (memoryChange.hasChanged) {
+					// Determine the address and length of changes made
 					let baseAddress = memoryChange.address;
 					let length = memoryChange.new.length;
 					for (let j = 0; j < length; j++) {
+						// Update the changes array to the old values at the appropriate addresses,
+						// note that changes may be overwritten if there are multiple changes to the same address across iterations, 
+						// but that is fine since we just want to see the final change values between the two iterations
 						changes[baseAddress + j] = memoryChange.old[j];
 					}
 				}
@@ -859,20 +934,29 @@ class Interpreter {
 		} else {
 			for (let i = newIteration + 1; i <= oldIteration; i++) {
 				let memoryChange = this.snapshot[i].memory;
+				// If memory didn't change, no need to check for changes at this iteration, move on to the next one
 				if (memoryChange.hasChanged) {
 					let baseAddress = memoryChange.address;
 					let length = memoryChange.new.length;
 					for (let j = 0; j < length; j++) {
+						// Same logic as before, but now we want to see the new values at the appropriate addresses, 
+						// since we are going backwards and want to see what changes were made that we are now undoing
 						changes[baseAddress + j] = memoryChange.new[j];
 					}
 				}
 			}
+			// When going backwards, the pc should be restored to the old pc value, not the new one, 
+			// since we are restoring a previous state
 			update.pc = {
 				old: this.snapshot[newIteration].pc,
 				new: this.snapshot[oldIteration].pc,
 			};
 		}
+
 		// Compare change values with this.mem to detect true changes
+		// A value in changes may have been updated but then changed back to its original value, so we want to 
+		// compare with the current memory state to only show actual changes
+		
 		for (let address in changes) {
 			let oldValue = changes[address];
 			let newValue = this.mem[address];
